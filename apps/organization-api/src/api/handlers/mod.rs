@@ -1,2 +1,2 @@
 pub mod health;
-pub mod organizations;
+pub mod organizations_controller;

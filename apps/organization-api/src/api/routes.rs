@@ -1,4 +1,4 @@
-use crate::api::handlers::{health, organizations};
+use crate::api::handlers::{health, organizations_controller};
 use crate::api::state::AppState;
 use axum::{
     Router,
@@ -16,7 +16,7 @@ pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health_check))
         .route("/api/v1/health", get(health::health_check))
-        .route("/api/v1/organizations", post(organizations::create_organization))
+        .route("/api/v1/organizations", post(organizations_controller::create_organization))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)

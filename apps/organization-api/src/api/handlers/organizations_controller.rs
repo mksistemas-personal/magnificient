@@ -1,14 +1,15 @@
+use crate::api::add_organization_dtos::CreateOrganizationDto;
+use crate::api::organization_shared_dtos::OrganizationResponseDto;
+use crate::api::state::AppState;
+use crate::application::add_organization::AddOrganizationRequest;
 use axum::{
+    Json,
     extract::State,
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use shared::entities::AddEntityUseCase;
-use crate::api::dtos::{CreateOrganizationDto, OrganizationResponseDto};
-use crate::api::errors::ApiError;
-use crate::api::state::AppState;
-use crate::application::add_organization::AddOrganizationRequest;
+use shared::errors::api_error::ApiError;
 
 pub async fn create_organization(
     State(state): State<AppState>,

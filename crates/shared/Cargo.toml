@@ -1,0 +1,9 @@
+[package]
+name = "shared"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono = "0.4.45"
+tsid = "0.3.4"
+

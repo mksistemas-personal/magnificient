@@ -46,15 +46,15 @@ impl Organization {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shared::entities::DocumentType;
+    use shared::entities::{DocumentType, TSID};
 
     #[test]
     fn test_create_organization() {
-        let org_id = OrganizationId::new(100);
+        let org_id = OrganizationId::new(TSID::from(100u64));
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
         let org = Organization::new(org_id, "Minha Empresa", doc);
 
-        assert_eq!(org.id(), OrganizationId::new(100));
+        assert_eq!(org.id(), OrganizationId::new(TSID::from(100u64)));
         assert_eq!(org.name(), "Minha Empresa");
         assert_eq!(org.document().value(), "00.000.000/0001-91");
     }

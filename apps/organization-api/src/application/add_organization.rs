@@ -1,9 +1,9 @@
 use crate::application::errors::OrganizationBusinessErrors;
 use crate::domain::organization::{Organization, OrganizationId};
 use shared::entities::{AddEntityUseCase, AuditFields, BusinessError, Document, DocumentType};
+use tsid::create_tsid;
 
 pub struct AddOrganizationRequest {
-    pub id: i64,
     pub name: String,
     pub document_value: String,
     pub document_type: DocumentType,
@@ -12,10 +12,25 @@ pub struct AddOrganizationRequest {
 
 
 struct AddOrganizationContext {
-    pub add_request: AddOrganizationRequest,
+    add_request: AddOrganizationRequest,
     pub organization_id: Option<OrganizationId>,
     pub document: Option<Document>,
     pub organization: Option<Organization>,
+}
+
+impl AddOrganizationContext {
+    pub fn name(&self) -> &str {
+        &self.add_request.name
+    }
+    pub fn document_value(&self) -> &str {
+        &self.add_request.document_value
+    }
+    pub fn document_type(&self) -> &DocumentType {
+        &self.add_request.document_type
+    }
+    pub fn created_by(&self) -> &str {
+        &self.add_request.created_by
+    }
 }
 
 impl From<AddOrganizationRequest> for AddOrganizationContext {
@@ -34,16 +49,13 @@ pub struct AddOrganizationUseCaseImpl;
 impl AddOrganizationUseCaseImpl {
     /// Valida e cria o identificador da organização (Railway Step)
     fn validate_id(mut context: AddOrganizationContext) -> Result<AddOrganizationContext, BusinessError> {
-        context.organization_id = Some(
-            OrganizationId::new_validated(context.add_request.id)
-                .map_err(|_| OrganizationBusinessErrors::id_invalid())?,
-        );
+        context.organization_id = Some(OrganizationId::new(create_tsid()));
         Ok(context)
     }
 
     /// Valida o nome da organização (Railway Step)
-    fn validate_name(mut context: AddOrganizationContext) -> Result<AddOrganizationContext, BusinessError> {
-        if context.add_request.name.trim().is_empty() {
+    fn validate_name(context: AddOrganizationContext) -> Result<AddOrganizationContext, BusinessError> {
+        if context.name().trim().is_empty() {
             Err(OrganizationBusinessErrors::name_empty())?
         };
         Ok(context)
@@ -53,16 +65,17 @@ impl AddOrganizationUseCaseImpl {
     fn validate_document(mut context: AddOrganizationContext) -> Result<AddOrganizationContext, BusinessError> {
         context.document = Some(
             Document::new_validated(
-                context.add_request.document_value.clone(),
-                context.add_request.document_type.clone())
+                context.document_value(),
+                context.document_type().clone(),
+            )
                 .map_err(|_| OrganizationBusinessErrors::document_invalid())?,
         );
         Ok(context)
     }
 
     /// Valida o autor da criação da organização (Railway Step)
-    fn validate_creator(mut context: AddOrganizationContext) -> Result<AddOrganizationContext, BusinessError> {
-        if context.add_request.created_by.trim().is_empty() {
+    fn validate_creator(context: AddOrganizationContext) -> Result<AddOrganizationContext, BusinessError> {
+        if context.created_by().trim().is_empty() {
             Err(OrganizationBusinessErrors::creator_required())?
         };
         Ok(context)
@@ -100,7 +113,6 @@ mod tests {
     fn test_add_organization_use_case_success() {
         let use_case = AddOrganizationUseCaseImpl;
         let request = AddOrganizationRequest {
-            id: 1,
             name: "Empresa XPTO".to_string(),
             document_value: "00.000.000/0001-91".to_string(),
             document_type: DocumentType::Cnpj,
@@ -111,7 +123,7 @@ mod tests {
         assert!(result.is_ok());
 
         let org = result.unwrap();
-        assert_eq!(org.id().value(), 1);
+        assert!(org.id().is_valid());
         assert_eq!(org.name(), "Empresa XPTO");
         assert_eq!(org.document().value(), "00.000.000/0001-91");
         assert!(org.audit.is_some());
@@ -122,7 +134,6 @@ mod tests {
     fn test_add_organization_use_case_invalid_doc() {
         let use_case = AddOrganizationUseCaseImpl;
         let request = AddOrganizationRequest {
-            id: 1,
             name: "Empresa XPTO".to_string(),
             document_value: "111.111.111-11".to_string(),
             document_type: DocumentType::Cnpj,
@@ -140,7 +151,6 @@ mod tests {
     fn test_add_organization_use_case_empty_name() {
         let use_case = AddOrganizationUseCaseImpl;
         let request = AddOrganizationRequest {
-            id: 1,
             name: "".to_string(),
             document_value: "00.000.000/0001-91".to_string(),
             document_type: DocumentType::Cnpj,
@@ -154,28 +164,9 @@ mod tests {
     }
 
     #[test]
-    fn test_add_organization_use_case_invalid_id() {
-        let use_case = AddOrganizationUseCaseImpl;
-        let request = AddOrganizationRequest {
-            id: -5,
-            name: "Empresa XPTO".to_string(),
-            document_value: "00.000.000/0001-91".to_string(),
-            document_type: DocumentType::Cnpj,
-            created_by: "admin_user".to_string(),
-        };
-
-        let result = use_case.execute(request);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(err, BusinessError::InvalidData(_)));
-        assert!(err.message().contains(OrganizationBusinessErrors::ORG_ID_INVALID));
-    }
-
-    #[test]
     fn test_add_organization_use_case_empty_creator() {
         let use_case = AddOrganizationUseCaseImpl;
         let request = AddOrganizationRequest {
-            id: 1,
             name: "Empresa XPTO".to_string(),
             document_value: "00.000.000/0001-91".to_string(),
             document_type: DocumentType::Cnpj,
@@ -186,5 +177,21 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err, OrganizationBusinessErrors::creator_required());
+    }
+
+    #[test]
+    fn test_add_organization_context_getters() {
+        let request = AddOrganizationRequest {
+            name: "Empresa Teste".to_string(),
+            document_value: "00.000.000/0001-91".to_string(),
+            document_type: DocumentType::Cnpj,
+            created_by: "autor".to_string(),
+        };
+
+        let context: AddOrganizationContext = request.into();
+        assert_eq!(context.name(), "Empresa Teste");
+        assert_eq!(context.document_value(), "00.000.000/0001-91");
+        assert_eq!(*context.document_type(), DocumentType::Cnpj);
+        assert_eq!(context.created_by(), "autor");
     }
 }

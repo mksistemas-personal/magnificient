@@ -1,0 +1,13 @@
+[server]
+host = "127.0.0.1"
+port = 8181
+
+[database]
+host = "localhost"
+port = 5432
+name = "magnificient"
+username = "admin"
+password = "admin@123"
+
+[logging]
+level = "info"

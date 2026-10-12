@@ -1,4 +1,5 @@
 use config::{Config, ConfigError};
+use database::DatabaseConnectionConfig;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -21,6 +22,47 @@ pub struct DatabaseConfig {
     pub name: String,
     pub username: String,
     pub password: String,
+    #[serde(default)]
+    pub max_connections: Option<u32>,
+    #[serde(default)]
+    pub min_connections: Option<u32>,
+    #[serde(default)]
+    pub acquire_timeout_secs: Option<u64>,
+}
+
+impl DatabaseConfig {
+    pub fn connection_url(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.username, self.password, self.host, self.port, self.name
+        )
+    }
+
+    pub fn to_connection_config(&self) -> DatabaseConnectionConfig {
+        DatabaseConnectionConfig {
+            host: self.host.clone(),
+            port: self.port,
+            name: self.name.clone(),
+            username: self.username.clone(),
+            password: self.password.clone(),
+            max_connections: self.max_connections,
+            min_connections: self.min_connections,
+            acquire_timeout_secs: self.acquire_timeout_secs,
+            ..Default::default()
+        }
+    }
+}
+
+impl From<&DatabaseConfig> for DatabaseConnectionConfig {
+    fn from(config: &DatabaseConfig) -> Self {
+        config.to_connection_config()
+    }
+}
+
+impl From<DatabaseConfig> for DatabaseConnectionConfig {
+    fn from(config: DatabaseConfig) -> Self {
+        config.to_connection_config()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -59,6 +101,9 @@ mod tests {
                 name: "magnificient".to_string(),
                 username: "admin".to_string(),
                 password: "secret".to_string(),
+                max_connections: None,
+                min_connections: None,
+                acquire_timeout_secs: None,
             },
             logging: LoggingConfig {
                 level: "info".to_string(),
@@ -71,6 +116,12 @@ mod tests {
         assert_eq!(shared_config.server.host, "127.0.0.1");
         assert_eq!(shared_config.server.port, 8080);
         assert_eq!(shared_clone.database.name, "magnificient");
+        assert_eq!(
+            shared_clone.database.connection_url(),
+            "postgres://admin:secret@localhost:5432/magnificient"
+        );
+        let conn_config = shared_clone.database.to_connection_config();
+        assert_eq!(conn_config.name, "magnificient");
         assert_eq!(*shared_config, *shared_clone);
     }
 }

@@ -1,4 +1,4 @@
-use crate::application::add_organization::AddOrganizationRequest;
+use crate::application::add_organization_service::AddOrganizationRequest;
 use serde::{Deserialize, Serialize};
 use shared::entities::DocumentType;
 use shared::errors::api_error::ApiError;

@@ -44,12 +44,17 @@ mod tests {
                 name: "test_db".to_string(),
                 username: "admin".to_string(),
                 password: "secret".to_string(),
+                max_connections: None,
+                min_connections: None,
+                acquire_timeout_secs: None,
             },
             logging: LoggingConfig {
                 level: "debug".to_string(),
             },
         };
-        AppState::new(Arc::new(config))
+        let db = database::DatabaseConnection::connect_lazy_with_config(&config.database.to_connection_config());
+        let repository = crate::infrastructure::in_memory_organization_repository::InMemoryOrganizationRepository::new();
+        AppState::new_with_repository(Arc::new(config), db, repository)
     }
 
     #[tokio::test]

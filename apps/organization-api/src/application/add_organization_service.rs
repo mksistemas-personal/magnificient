@@ -1,6 +1,8 @@
 use crate::application::errors::OrganizationBusinessErrors;
 use crate::domain::organization::{Organization, OrganizationId};
-use shared::entities::{AddEntityUseCase, AuditFields, BusinessError, Document, DocumentType};
+use crate::domain::organization_repository::OrganizationRepository;
+use shared::entities::{AsyncResultExt, AuditFields, BusinessError, Document, DocumentType};
+use std::sync::Arc;
 use tsid::create_tsid;
 
 pub struct AddOrganizationRequest {
@@ -10,8 +12,7 @@ pub struct AddOrganizationRequest {
     pub created_by: String,
 }
 
-
-struct AddOrganizationContext {
+pub struct AddOrganizationContext {
     add_request: AddOrganizationRequest,
     pub organization_id: Option<OrganizationId>,
     pub document: Option<Document>,
@@ -44,9 +45,24 @@ impl From<AddOrganizationRequest> for AddOrganizationContext {
     }
 }
 
-pub struct AddOrganizationUseCaseImpl;
+#[derive(Clone)]
+pub struct AddOrganizationServiceImpl {
+    repository: Arc<dyn OrganizationRepository>,
+}
 
-impl AddOrganizationUseCaseImpl {
+impl AddOrganizationServiceImpl {
+    /// Cria uma nova instância do caso de uso com o repositório fornecido.
+    pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
+        Self {
+            repository: Arc::new(repository),
+        }
+    }
+
+    /// Cria uma nova instância do caso de uso a partir de um `Arc<dyn OrganizationRepository>`.
+    pub fn new_with_arc(repository: Arc<dyn OrganizationRepository>) -> Self {
+        Self { repository }
+    }
+
     /// Valida e cria o identificador da organização (Railway Step)
     fn validate_id(mut context: AddOrganizationContext) -> Result<AddOrganizationContext, BusinessError> {
         context.organization_id = Some(OrganizationId::new(create_tsid()));
@@ -81,7 +97,7 @@ impl AddOrganizationUseCaseImpl {
         Ok(context)
     }
 
-    /// Monta a entidade Organization com auditoria a partir dos dados validados
+    /// Monta a entidade Organization com auditoria a partir dos dados validados (Railway Step)
     fn build_organization(mut context: AddOrganizationContext) -> Result<AddOrganizationContext, BusinessError> {
         let id = context.organization_id.ok_or_else(OrganizationBusinessErrors::id_invalid)?;
         let document = context.document.take().ok_or_else(OrganizationBusinessErrors::document_invalid)?;
@@ -91,27 +107,43 @@ impl AddOrganizationUseCaseImpl {
         context.organization = Some(Organization::new(id, name, document).with_audit(audit));
         Ok(context)
     }
-}
 
-impl AddEntityUseCase<AddOrganizationRequest, Result<Organization, BusinessError>> for AddOrganizationUseCaseImpl {
-    /// Executa o caso de uso encadeando as etapas de validação e criação pelo padrão Railway Oriented Programming (ROP).
-    fn execute(&self, request: AddOrganizationRequest) -> Result<Organization, BusinessError> {
+    /// Salva a organização no banco de dados através do repositório (Railway Step)
+    async fn save_organization(&self, mut context: AddOrganizationContext) -> Result<AddOrganizationContext, BusinessError> {
+        let organization = context
+            .organization
+            .as_ref()
+            .ok_or_else(OrganizationBusinessErrors::not_found)?;
+        context.organization = Some(self.repository.save(organization).await?);
+        Ok(context)
+    }
+
+    /// Executa o caso de uso encadeando as etapas de validação, construção e persistência no banco de dados.
+    pub async fn execute(&self, request: AddOrganizationRequest) -> Result<Organization, BusinessError> {
         Self::validate_id(request.into())
             .and_then(Self::validate_name)
             .and_then(Self::validate_document)
             .and_then(Self::validate_creator)
             .and_then(Self::build_organization)
-            .map(|context| context.organization.unwrap())
+            .and_then_async(|context| self.save_organization(context))
+            .await
+            .and_then(|context| {
+                context
+                    .organization
+                    .ok_or_else(OrganizationBusinessErrors::not_found)
+            })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::infrastructure::in_memory_organization_repository::InMemoryOrganizationRepository;
 
-    #[test]
-    fn test_add_organization_use_case_success() {
-        let use_case = AddOrganizationUseCaseImpl;
+    #[tokio::test]
+    async fn test_add_organization_use_case_success() {
+        let repository = InMemoryOrganizationRepository::new();
+        let use_case = AddOrganizationServiceImpl::new(repository.clone());
         let request = AddOrganizationRequest {
             name: "Empresa XPTO".to_string(),
             document_value: "00.000.000/0001-91".to_string(),
@@ -119,7 +151,7 @@ mod tests {
             created_by: "admin_user".to_string(),
         };
 
-        let result = use_case.execute(request);
+        let result = use_case.execute(request).await;
         assert!(result.is_ok());
 
         let org = result.unwrap();
@@ -127,12 +159,44 @@ mod tests {
         assert_eq!(org.name(), "Empresa XPTO");
         assert_eq!(org.document().value(), "00.000.000/0001-91");
         assert!(org.audit.is_some());
-        assert_eq!(org.audit.unwrap().created_by(), "admin_user");
+        assert_eq!(org.audit.as_ref().unwrap().created_by(), "admin_user");
+
+        // Verifica se a entidade foi de fato persistida no repositório
+        assert_eq!(repository.len(), 1);
+        let saved_org = repository.find_by_id(&org.id()).expect("Organização deveria estar no repositório");
+        assert_eq!(saved_org.name(), "Empresa XPTO");
     }
 
-    #[test]
-    fn test_add_organization_use_case_invalid_doc() {
-        let use_case = AddOrganizationUseCaseImpl;
+    #[tokio::test]
+    async fn test_add_organization_use_case_duplicate_document() {
+        let repository = InMemoryOrganizationRepository::new();
+        let use_case = AddOrganizationServiceImpl::new(repository.clone());
+
+        let request1 = AddOrganizationRequest {
+            name: "Empresa XPTO 1".to_string(),
+            document_value: "00.000.000/0001-91".to_string(),
+            document_type: DocumentType::Cnpj,
+            created_by: "admin_user".to_string(),
+        };
+        let request2 = AddOrganizationRequest {
+            name: "Empresa XPTO 2".to_string(),
+            document_value: "00.000.000/0001-91".to_string(),
+            document_type: DocumentType::Cnpj,
+            created_by: "admin_user".to_string(),
+        };
+
+        let result1 = use_case.execute(request1).await;
+        assert!(result1.is_ok());
+
+        let result2 = use_case.execute(request2).await;
+        assert!(result2.is_err());
+        assert_eq!(result2.unwrap_err(), OrganizationBusinessErrors::document_already_in_use());
+    }
+
+    #[tokio::test]
+    async fn test_add_organization_use_case_invalid_doc() {
+        let repository = InMemoryOrganizationRepository::new();
+        let use_case = AddOrganizationServiceImpl::new(repository);
         let request = AddOrganizationRequest {
             name: "Empresa XPTO".to_string(),
             document_value: "111.111.111-11".to_string(),
@@ -140,16 +204,17 @@ mod tests {
             created_by: "admin_user".to_string(),
         };
 
-        let result = use_case.execute(request);
+        let result = use_case.execute(request).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(matches!(err, BusinessError::InvalidData(_)));
         assert!(err.message().contains(OrganizationBusinessErrors::ORG_DOCUMENT_INVALID));
     }
 
-    #[test]
-    fn test_add_organization_use_case_empty_name() {
-        let use_case = AddOrganizationUseCaseImpl;
+    #[tokio::test]
+    async fn test_add_organization_use_case_empty_name() {
+        let repository = InMemoryOrganizationRepository::new();
+        let use_case = AddOrganizationServiceImpl::new(repository);
         let request = AddOrganizationRequest {
             name: "".to_string(),
             document_value: "00.000.000/0001-91".to_string(),
@@ -157,15 +222,16 @@ mod tests {
             created_by: "admin_user".to_string(),
         };
 
-        let result = use_case.execute(request);
+        let result = use_case.execute(request).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err, OrganizationBusinessErrors::name_empty());
     }
 
-    #[test]
-    fn test_add_organization_use_case_empty_creator() {
-        let use_case = AddOrganizationUseCaseImpl;
+    #[tokio::test]
+    async fn test_add_organization_use_case_empty_creator() {
+        let repository = InMemoryOrganizationRepository::new();
+        let use_case = AddOrganizationServiceImpl::new(repository);
         let request = AddOrganizationRequest {
             name: "Empresa XPTO".to_string(),
             document_value: "00.000.000/0001-91".to_string(),
@@ -173,7 +239,7 @@ mod tests {
             created_by: "".to_string(),
         };
 
-        let result = use_case.execute(request);
+        let result = use_case.execute(request).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err, OrganizationBusinessErrors::creator_required());

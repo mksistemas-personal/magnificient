@@ -1,24 +1,27 @@
-use crate::application::add_organization_service::AddOrganizationServiceImpl;
+use crate::application::add_organization_service::{AddOrganizationRequest, AddOrganizationServiceImpl};
 use crate::config::organization_config::OrganizationAppConfig;
+use crate::domain::organization::Organization;
 use crate::domain::organization_repository::OrganizationRepository;
 use crate::infrastructure::postgres_organization_repository::PostgresOrganizationRepository;
 use database::DatabaseConnection;
+use shared::entities::AsyncAddEntityUseCase;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<OrganizationAppConfig>,
     pub db: DatabaseConnection,
-    pub add_organization_use_case: Arc<AddOrganizationServiceImpl>,
+    pub add_organization_use_case: Arc<dyn AsyncAddEntityUseCase<AddOrganizationRequest, Organization>>,
 }
 
 impl AppState {
     pub fn new(config: Arc<OrganizationAppConfig>, db: DatabaseConnection) -> Self {
         let repository = PostgresOrganizationRepository::from_connection(&db);
+        let uow = db.unit_of_work();
         Self {
             config,
             db,
-            add_organization_use_case: Arc::new(AddOrganizationServiceImpl::new(repository)),
+            add_organization_use_case: Arc::new(AddOrganizationServiceImpl::new_with_uow(repository, uow)),
         }
     }
 
@@ -37,7 +40,7 @@ impl AppState {
     pub fn new_with_use_case(
         config: Arc<OrganizationAppConfig>,
         db: DatabaseConnection,
-        use_case: Arc<AddOrganizationServiceImpl>,
+        use_case: Arc<dyn AsyncAddEntityUseCase<AddOrganizationRequest, Organization>>,
     ) -> Self {
         Self {
             config,

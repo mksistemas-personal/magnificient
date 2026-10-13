@@ -1,7 +1,9 @@
 use crate::application::errors::OrganizationBusinessErrors;
 use crate::domain::organization::{Organization, OrganizationId};
 use crate::domain::organization_repository::OrganizationRepository;
-use shared::entities::{AsyncResultExt, AuditFields, BusinessError, Document, DocumentType};
+use async_trait::async_trait;
+use database::UnitOfWork;
+use shared::entities::{AsyncAddEntityUseCase, AsyncResultExt, AuditFields, BusinessError, Document, DocumentType};
 use std::sync::Arc;
 use tsid::create_tsid;
 
@@ -48,6 +50,7 @@ impl From<AddOrganizationRequest> for AddOrganizationContext {
 #[derive(Clone)]
 pub struct AddOrganizationServiceImpl {
     repository: Arc<dyn OrganizationRepository>,
+    uow: Option<UnitOfWork>,
 }
 
 impl AddOrganizationServiceImpl {
@@ -55,12 +58,44 @@ impl AddOrganizationServiceImpl {
     pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
         Self {
             repository: Arc::new(repository),
+            uow: None,
+        }
+    }
+
+    /// Cria uma nova instância do caso de uso com o repositório e a Unidade de Trabalho (`UnitOfWork`).
+    pub fn new_with_uow(
+        repository: impl OrganizationRepository + 'static,
+        uow: UnitOfWork,
+    ) -> Self {
+        Self {
+            repository: Arc::new(repository),
+            uow: Some(uow),
         }
     }
 
     /// Cria uma nova instância do caso de uso a partir de um `Arc<dyn OrganizationRepository>`.
     pub fn new_with_arc(repository: Arc<dyn OrganizationRepository>) -> Self {
-        Self { repository }
+        Self {
+            repository,
+            uow: None,
+        }
+    }
+
+    /// Cria uma nova instância do caso de uso a partir de um `Arc<dyn OrganizationRepository>` e `UnitOfWork`.
+    pub fn new_with_arc_and_uow(
+        repository: Arc<dyn OrganizationRepository>,
+        uow: UnitOfWork,
+    ) -> Self {
+        Self {
+            repository,
+            uow: Some(uow),
+        }
+    }
+
+    /// Define ou atualiza a Unidade de Trabalho (`UnitOfWork`) para persistência transacional.
+    pub fn with_uow(mut self, uow: UnitOfWork) -> Self {
+        self.uow = Some(uow);
+        self
     }
 
     /// Valida e cria o identificador da organização (Railway Step)
@@ -108,30 +143,40 @@ impl AddOrganizationServiceImpl {
         Ok(context)
     }
 
-    /// Salva a organização no banco de dados através do repositório (Railway Step)
-    async fn save_organization(&self, mut context: AddOrganizationContext) -> Result<AddOrganizationContext, BusinessError> {
-        let organization = context
-            .organization
-            .as_ref()
-            .ok_or_else(OrganizationBusinessErrors::not_found)?;
-        context.organization = Some(self.repository.save(organization).await?);
-        Ok(context)
+    /// Salva a organização no banco de dados através do repositório (com suporte atômico transacional via UnitOfWork)
+    async fn save_organization(&self, organization: &Organization) -> Result<Organization, BusinessError> {
+        if let Some(uow) = &self.uow {
+            uow.run_tx(|_tx| async {
+                self.repository.save(organization).await
+            })
+            .await
+        } else {
+            self.repository.save(organization).await
+        }
     }
 
-    /// Executa o caso de uso encadeando as etapas de validação, construção e persistência no banco de dados.
+    /// Executa o caso de uso encadeando as etapas de validação, construção e persistência atômica no Railway.
     pub async fn execute(&self, request: AddOrganizationRequest) -> Result<Organization, BusinessError> {
+        <Self as AsyncAddEntityUseCase<AddOrganizationRequest, Organization>>::execute(self, request).await
+    }
+}
+
+#[async_trait]
+impl AsyncAddEntityUseCase<AddOrganizationRequest, Organization> for AddOrganizationServiceImpl {
+    async fn execute(&self, request: AddOrganizationRequest) -> Result<Organization, BusinessError> {
         Self::validate_id(request.into())
             .and_then(Self::validate_name)
             .and_then(Self::validate_document)
             .and_then(Self::validate_creator)
             .and_then(Self::build_organization)
-            .and_then_async(|context| self.save_organization(context))
-            .await
-            .and_then(|context| {
-                context
+            .and_then_async(|context| async move {
+                let organization = context
                     .organization
-                    .ok_or_else(OrganizationBusinessErrors::not_found)
+                    .ok_or_else(OrganizationBusinessErrors::not_found)?;
+
+                self.save_organization(&organization).await
             })
+            .await
     }
 }
 
@@ -259,5 +304,16 @@ mod tests {
         assert_eq!(context.document_value(), "00.000.000/0001-91");
         assert_eq!(*context.document_type(), DocumentType::Cnpj);
         assert_eq!(context.created_by(), "autor");
+    }
+
+    #[tokio::test]
+    async fn test_add_organization_service_constructors() {
+        let repository = InMemoryOrganizationRepository::new();
+        let service = AddOrganizationServiceImpl::new(repository.clone());
+        assert!(service.uow.is_none());
+
+        let arc_repo = Arc::new(repository);
+        let service_arc = AddOrganizationServiceImpl::new_with_arc(arc_repo.clone());
+        assert!(service_arc.uow.is_none());
     }
 }

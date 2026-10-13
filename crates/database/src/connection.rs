@@ -93,6 +93,20 @@ impl DatabaseConnection {
     pub async fn close(&self) {
         self.pool.close().await;
     }
+
+    /// Retorna uma instância de `UnitOfWork` associada a esta conexão para orquestração de transações.
+    pub fn unit_of_work(&self) -> crate::unit_of_work::UnitOfWork {
+        crate::unit_of_work::UnitOfWork::from_connection(self)
+    }
+
+    /// Executa uma operação assíncrona dentro de um bloco transacional atômico gerenciado por `UnitOfWork`.
+    pub async fn run_tx<F, Fut, T>(&self, operation: F) -> Result<T, shared::entities::BusinessError>
+    where
+        F: FnOnce(&mut sqlx::Transaction<'static, sqlx::Postgres>) -> Fut,
+        Fut: std::future::Future<Output = Result<T, shared::entities::BusinessError>>,
+    {
+        self.unit_of_work().run_tx(operation).await
+    }
 }
 
 impl Deref for DatabaseConnection {

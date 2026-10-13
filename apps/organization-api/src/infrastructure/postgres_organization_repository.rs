@@ -30,32 +30,23 @@ impl PostgresOrganizationRepository {
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
-}
 
-impl From<PgPool> for PostgresOrganizationRepository {
-    fn from(pool: PgPool) -> Self {
-        Self::new(pool)
-    }
-}
-
-impl From<DatabaseConnection> for PostgresOrganizationRepository {
-    fn from(connection: DatabaseConnection) -> Self {
-        Self::new(connection.into_inner())
-    }
-}
-
-impl From<&DatabaseConnection> for PostgresOrganizationRepository {
-    fn from(connection: &DatabaseConnection) -> Self {
-        Self::from_connection(connection)
-    }
-}
-
-#[async_trait]
-impl OrganizationRepository for PostgresOrganizationRepository {
-    async fn save(
-        &self,
+    /// Salva a organização utilizando uma transação ativa do SQLx (`Transaction<'_, Postgres>`).
+    pub async fn save_with_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         organization: &Organization,
     ) -> Result<Organization, BusinessError> {
+        Self::execute_save(&mut **tx, organization).await
+    }
+
+    /// Executa o comando de inserção/atualização no PostgreSQL utilizando qualquer executor SQLx compatível.
+    async fn execute_save<'e, E>(
+        executor: E,
+        organization: &Organization,
+    ) -> Result<Organization, BusinessError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
         let (created_at, updated_at, created_by, updated_by) = match &organization.audit {
             Some(audit) => (
                 audit.created_at(),
@@ -102,7 +93,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
             .bind(updated_at)
             .bind(created_by)
             .bind(updated_by)
-            .execute(&self.pool)
+            .execute(executor)
             .await
             .map_err(|err| {
                 if let Some(db_err) = err.as_database_error() {
@@ -116,6 +107,34 @@ impl OrganizationRepository for PostgresOrganizationRepository {
             })?;
 
         Ok(organization.clone())
+    }
+}
+
+impl From<PgPool> for PostgresOrganizationRepository {
+    fn from(pool: PgPool) -> Self {
+        Self::new(pool)
+    }
+}
+
+impl From<DatabaseConnection> for PostgresOrganizationRepository {
+    fn from(connection: DatabaseConnection) -> Self {
+        Self::new(connection.into_inner())
+    }
+}
+
+impl From<&DatabaseConnection> for PostgresOrganizationRepository {
+    fn from(connection: &DatabaseConnection) -> Self {
+        Self::from_connection(connection)
+    }
+}
+
+#[async_trait]
+impl OrganizationRepository for PostgresOrganizationRepository {
+    async fn save(
+        &self,
+        organization: &Organization,
+    ) -> Result<Organization, BusinessError> {
+        Self::execute_save(&self.pool, organization).await
     }
 }
 

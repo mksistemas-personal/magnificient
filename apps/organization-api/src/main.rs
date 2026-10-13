@@ -20,6 +20,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Inicializa a conexão com o banco de dados PostgreSQL via SQLx
     let db = DatabaseConnection::connect_with_config(&shared_config.database.to_connection_config()).await?;
 
+    // Executa as migrações automáticas do banco de dados PostgreSQL
+    info!("Executando migrações do banco de dados...");
+    sqlx::migrate!("./migrations")
+        .run(db.pool())
+        .await?;
+    info!("Migrações do banco de dados executadas com sucesso.");
+
     let server_addr = format!("{}:{}", shared_config.server.host, shared_config.server.port);
 
     let state = AppState::new(Arc::clone(&shared_config), db);

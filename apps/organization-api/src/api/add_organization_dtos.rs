@@ -1,6 +1,7 @@
+use crate::api::organization_shared_dtos::default_document_type;
+use crate::api::organization_shared_dtos::parse_document_type;
 use crate::application::add_organization_service::AddOrganizationRequest;
 use serde::{Deserialize, Serialize};
-use shared::entities::DocumentType;
 use shared::errors::api_error::ApiError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -10,26 +11,6 @@ pub struct CreateOrganizationDto {
     #[serde(default = "default_document_type")]
     pub document_type: String,
     pub created_by: String,
-}
-
-fn default_document_type() -> String {
-    "CNPJ".to_string()
-}
-
-pub fn parse_document_type(doc_type_str: &str) -> Result<DocumentType, ApiError> {
-    match doc_type_str.trim().to_uppercase().as_str() {
-        "CNPJ" => Ok(DocumentType::Cnpj),
-        "CPF" => Ok(DocumentType::Cpf),
-        "CUIT" => Ok(DocumentType::Cuit),
-        "CUIL" => Ok(DocumentType::Cuil),
-        "DNI" => Ok(DocumentType::Dni),
-        "PASSPORT" | "PASSAPORTE" => Ok(DocumentType::Passport),
-        other if !other.is_empty() => Ok(DocumentType::Other {
-            name: other.to_string(),
-            country: None,
-        }),
-        _ => Err(ApiError::BadRequest("Tipo de documento não informado ou inválido".to_string())),
-    }
 }
 
 impl TryFrom<CreateOrganizationDto> for AddOrganizationRequest {
@@ -52,7 +33,7 @@ mod tests {
     use super::*;
     use crate::api::organization_shared_dtos::OrganizationResponseDto;
     use crate::domain::Organization;
-    use shared::entities::{AuditFields, Document};
+    use shared::entities::{AuditFields, Document, DocumentType};
     use tsid::TSID;
 
     #[test]

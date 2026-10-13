@@ -1,5 +1,7 @@
 use crate::domain::Organization;
 use serde::{Deserialize, Serialize};
+use shared::entities::DocumentType;
+use shared::errors::api_error::ApiError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OrganizationResponseDto {
@@ -26,6 +28,26 @@ pub struct AuditResponseDto {
     pub created_at: String,
     pub updated_by: String,
     pub updated_at: String,
+}
+
+pub fn default_document_type() -> String {
+    "CNPJ".to_string()
+}
+
+pub fn parse_document_type(doc_type_str: &str) -> Result<DocumentType, ApiError> {
+    match doc_type_str.trim().to_uppercase().as_str() {
+        "CNPJ" => Ok(DocumentType::Cnpj),
+        "CPF" => Ok(DocumentType::Cpf),
+        "CUIT" => Ok(DocumentType::Cuit),
+        "CUIL" => Ok(DocumentType::Cuil),
+        "DNI" => Ok(DocumentType::Dni),
+        "PASSPORT" | "PASSAPORTE" => Ok(DocumentType::Passport),
+        other if !other.is_empty() => Ok(DocumentType::Other {
+            name: other.to_string(),
+            country: None,
+        }),
+        _ => Err(ApiError::BadRequest("Tipo de documento não informado ou inválido".to_string())),
+    }
 }
 
 impl From<Organization> for OrganizationResponseDto {

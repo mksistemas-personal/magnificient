@@ -14,7 +14,7 @@ pub struct AddOrganizationRequest {
     pub created_by: String,
 }
 
-pub struct AddOrganizationContext {
+struct AddOrganizationContext {
     add_request: AddOrganizationRequest,
     pub organization_id: Option<OrganizationId>,
     pub document: Option<Document>,
@@ -149,7 +149,7 @@ impl AddOrganizationServiceImpl {
             uow.run_tx(|_tx| async {
                 self.repository.save(organization).await
             })
-            .await
+                .await
         } else {
             self.repository.save(organization).await
         }

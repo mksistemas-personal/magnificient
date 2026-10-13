@@ -14,18 +14,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    let config = OrganizationAppConfig::load().expect("Falha ao carregar configurações da aplicação");
+    let config = OrganizationAppConfig::load().expect("Fail to load configurations");
     let shared_config = Arc::new(config);
 
     // Inicializa a conexão com o banco de dados PostgreSQL via SQLx
     let db = DatabaseConnection::connect_with_config(&shared_config.database.to_connection_config()).await?;
 
     // Executa as migrações automáticas do banco de dados PostgreSQL
-    info!("Executando migrações do banco de dados...");
+    info!("Executing database migrations...");
     sqlx::migrate!("./migrations")
         .run(db.pool())
         .await?;
-    info!("Migrações do banco de dados executadas com sucesso.");
+    info!("Migrations run successfully.");
 
     let server_addr = format!("{}:{}", shared_config.server.host, shared_config.server.port);
 
@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = create_router(state);
 
     let listener = TcpListener::bind(&server_addr).await?;
-    info!("Organizacao API inicializada e escutando em http://{}", server_addr);
+    info!("Organization API listening in http://{}", server_addr);
 
     axum::serve(listener, app).await?;
     Ok(())

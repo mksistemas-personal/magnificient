@@ -1,6 +1,6 @@
-use crate::application::errors::OrganizationBusinessErrors;
 use crate::domain::organization::{Organization, OrganizationId};
 use crate::domain::organization_repository::OrganizationRepository;
+use crate::errors::OrganizationBusinessErrors;
 use async_trait::async_trait;
 use database::UnitOfWork;
 use shared::entities::{AsyncAddEntityUseCase, AsyncResultExt, AuditFields, BusinessError, Document, DocumentType};

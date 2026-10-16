@@ -1,5 +1,6 @@
 use crate::api::handlers::{health, organizations_controller};
 use crate::api::state::AppState;
+use axum::routing::put;
 use axum::{
     Router,
     routing::{get, post},
@@ -17,6 +18,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/health", get(health::health_check))
         .route("/api/v1/health", get(health::health_check))
         .route("/api/v1/organizations", post(organizations_controller::create_organization))
+        .route("/api/v1/organizations/{id}", put(organizations_controller::update_organization))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)
@@ -26,13 +28,18 @@ pub fn create_router(state: AppState) -> Router {
 mod tests {
     use super::*;
     use crate::config::organization_config::{DatabaseConfig, LoggingConfig, OrganizationAppConfig, ServerConfig};
+    use crate::domain::organization::{Organization, OrganizationId};
+    use crate::domain::organization_repository::OrganizationRepository;
+    use crate::infrastructure::in_memory_organization_repository::InMemoryOrganizationRepository;
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode, header};
     use serde_json::{Value, json};
+    use shared::entities::{AuditFields, Document, DocumentType};
     use std::sync::Arc;
     use tower::ServiceExt;
+    use tsid::create_tsid;
 
-    fn create_test_state() -> AppState {
+    fn create_test_state_with_repo(repository: InMemoryOrganizationRepository) -> AppState {
         let config = OrganizationAppConfig {
             server: ServerConfig {
                 host: "127.0.0.1".to_string(),
@@ -53,8 +60,11 @@ mod tests {
             },
         };
         let db = database::DatabaseConnection::connect_lazy_with_config(&config.database.to_connection_config());
-        let repository = crate::infrastructure::in_memory_organization_repository::InMemoryOrganizationRepository::new();
         AppState::new_with_repository(Arc::new(config), db, repository)
+    }
+
+    fn create_test_state() -> AppState {
+        create_test_state_with_repo(InMemoryOrganizationRepository::new())
     }
 
     #[tokio::test]
@@ -177,5 +187,174 @@ mod tests {
         let json_body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json_body["code"], "BAD_REQUEST");
         assert_eq!(json_body["status"], 400);
+    }
+
+    #[tokio::test]
+    async fn test_update_organization_success() {
+        let repo = InMemoryOrganizationRepository::new();
+        let org_id = OrganizationId::new(create_tsid());
+        let id_str = org_id.to_string();
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Acme Corp", doc)
+            .with_audit(AuditFields::created("autor_original"));
+        repo.save(&org).await.unwrap();
+
+        let app = create_router(create_test_state_with_repo(repo));
+
+        let payload = json!({
+            "name": "Acme Corp Atualizada",
+            "updated_by": "editor_teste"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/organizations/{id_str}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = to_bytes(response.into_body(), 1024 * 64).await.unwrap();
+        let json_body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json_body["id"], id_str);
+        assert_eq!(json_body["name"], "Acme Corp Atualizada");
+        assert_eq!(json_body["document"]["value"], "00.000.000/0001-91");
+        assert_eq!(json_body["document"]["document_type"], "CNPJ");
+        assert_eq!(json_body["audit"]["created_by"], "autor_original");
+        assert_eq!(json_body["audit"]["updated_by"], "editor_teste");
+    }
+
+    #[tokio::test]
+    async fn test_update_organization_not_found() {
+        let app = create_router(create_test_state());
+        let nonexistent_id = create_tsid().to_string();
+
+        let payload = json!({
+            "name": "Acme Inexistente",
+            "updated_by": "editor_teste"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/organizations/{nonexistent_id}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let body = to_bytes(response.into_body(), 1024 * 64).await.unwrap();
+        let json_body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json_body["code"], "NOT_FOUND");
+        assert_eq!(json_body["status"], 404);
+    }
+
+    #[tokio::test]
+    async fn test_update_organization_empty_name() {
+        let repo = InMemoryOrganizationRepository::new();
+        let org_id = OrganizationId::new(create_tsid());
+        let id_str = org_id.to_string();
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Acme Original", doc)
+            .with_audit(AuditFields::created("autor"));
+        repo.save(&org).await.unwrap();
+
+        let app = create_router(create_test_state_with_repo(repo));
+
+        let payload = json!({
+            "name": "   ",
+            "updated_by": "editor"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/organizations/{id_str}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), 1024 * 64).await.unwrap();
+        let json_body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json_body["code"], "BAD_REQUEST");
+        assert_eq!(json_body["status"], 400);
+    }
+
+    #[tokio::test]
+    async fn test_update_organization_empty_updater() {
+        let repo = InMemoryOrganizationRepository::new();
+        let org_id = OrganizationId::new(create_tsid());
+        let id_str = org_id.to_string();
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Acme Original", doc)
+            .with_audit(AuditFields::created("autor"));
+        repo.save(&org).await.unwrap();
+
+        let app = create_router(create_test_state_with_repo(repo));
+
+        let payload = json!({
+            "name": "Nome Valido",
+            "updated_by": "   "
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/organizations/{id_str}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), 1024 * 64).await.unwrap();
+        let json_body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json_body["code"], "BAD_REQUEST");
+        assert_eq!(json_body["status"], 400);
+    }
+
+    #[tokio::test]
+    async fn test_update_organization_invalid_path_id() {
+        let app = create_router(create_test_state());
+
+        let payload = json!({
+            "name": "Nome Valido",
+            "updated_by": "editor"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/v1/organizations/invalid-id-format")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

@@ -30,6 +30,8 @@ impl OrganizationBusinessErrors {
     /// Mensagem de erro para ausência de autor na criação da organização.
     pub const ORG_CREATOR_REQUIRED: &'static str = "organization.creator.required";
 
+    pub const ORG_UPDATER_REQUIRED: &'static str = "organization.updater.required";
+
     /// Mensagem de erro para operações em organizações com cadastro inativo.
     pub const ORG_INACTIVE: &'static str = "organization.inactive";
 
@@ -73,6 +75,10 @@ impl OrganizationBusinessErrors {
     /// Retorna `BusinessError::InvalidData` quando o criador é obrigatório.
     pub fn creator_required() -> BusinessError {
         BusinessError::invalid_data(Self::ORG_CREATOR_REQUIRED)
+    }
+
+    pub fn updater_required() -> BusinessError {
+        BusinessError::invalid_data(Self::ORG_UPDATER_REQUIRED)
     }
 
     /// Retorna `BusinessError::NotAllowed` quando a organização está inativa.

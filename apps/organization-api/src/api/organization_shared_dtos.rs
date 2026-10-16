@@ -1,4 +1,5 @@
 use crate::domain::Organization;
+use crate::errors::OrganizationBusinessErrors;
 use serde::{Deserialize, Serialize};
 use shared::entities::DocumentType;
 use shared::errors::api_error::ApiError;
@@ -35,19 +36,11 @@ pub fn default_document_type() -> String {
 }
 
 pub fn parse_document_type(doc_type_str: &str) -> Result<DocumentType, ApiError> {
-    match doc_type_str.trim().to_uppercase().as_str() {
-        "CNPJ" => Ok(DocumentType::Cnpj),
-        "CPF" => Ok(DocumentType::Cpf),
-        "CUIT" => Ok(DocumentType::Cuit),
-        "CUIL" => Ok(DocumentType::Cuil),
-        "DNI" => Ok(DocumentType::Dni),
-        "PASSPORT" | "PASSAPORTE" => Ok(DocumentType::Passport),
-        other if !other.is_empty() => Ok(DocumentType::Other {
-            name: other.to_string(),
-            country: None,
-        }),
-        _ => Err(ApiError::BadRequest("Tipo de documento não informado ou inválido".to_string())),
+    let doc_type = doc_type_str.trim().to_uppercase();
+    if doc_type.is_empty() {
+        return Err(ApiError::BadRequest(OrganizationBusinessErrors::ORG_DOCUMENT_INVALID.to_string()));
     }
+    Ok(DocumentType::from_code(&doc_type, None))
 }
 
 impl From<Organization> for OrganizationResponseDto {

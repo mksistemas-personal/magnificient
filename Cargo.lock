@@ -1507,6 +1507,7 @@ dependencies = [
  "axum",
  "chrono",
  "serde",
+ "sqlx",
  "tokio",
  "tsid",
 ]
@@ -2053,6 +2054,7 @@ dependencies = [
  "lazy_static",
  "phf",
  "rand 0.8.8",
+ "serde",
 ]
 
 [[package]]

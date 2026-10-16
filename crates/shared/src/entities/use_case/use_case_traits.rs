@@ -23,6 +23,11 @@ pub trait AsyncAddEntityUseCase<Request, Response>: Send + Sync {
     async fn execute(&self, request: Request) -> Result<Response, BusinessError>;
 }
 
+#[async_trait]
+pub trait AsyncUpdateEntityUseCase<Request, Response>: Send + Sync {
+    async fn execute(&self, request: Request) -> Result<Response, BusinessError>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

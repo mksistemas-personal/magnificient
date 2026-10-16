@@ -1,6 +1,7 @@
-use async_trait::async_trait;
 use crate::domain::organization::Organization;
+use async_trait::async_trait;
 use shared::entities::BusinessError;
+use tsid::TSID;
 
 /// Trait que define o contrato de persistência para a entidade `Organization`.
 #[async_trait]
@@ -10,4 +11,6 @@ pub trait OrganizationRepository: Send + Sync {
         &self,
         organization: &Organization,
     ) -> Result<Organization, BusinessError>;
+
+    async fn find_by_id(&self, id: TSID) -> Result<Organization, BusinessError>;
 }

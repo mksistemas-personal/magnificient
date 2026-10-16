@@ -1,9 +1,10 @@
-use async_trait::async_trait;
-use crate::application::errors::OrganizationBusinessErrors;
-use crate::domain::organization::Organization;
+use crate::domain::organization::{Organization, OrganizationId};
 use crate::domain::organization_repository::OrganizationRepository;
+use crate::errors::OrganizationBusinessErrors;
+use async_trait::async_trait;
 use database::DatabaseConnection;
-use shared::entities::BusinessError;
+use shared::entities::{AuditFields, BusinessError, Country, Document, DocumentType, TSID};
+use shared::row_get_field;
 use sqlx::PgPool;
 use tracing::error;
 
@@ -39,13 +40,21 @@ impl PostgresOrganizationRepository {
         Self::execute_save(&mut **tx, organization).await
     }
 
+    /// Busca uma organização pelo ID utilizando uma transação ativa do SQLx (`Transaction<'_, Postgres>`).
+    pub async fn find_by_id_with_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: TSID,
+    ) -> Result<Organization, BusinessError> {
+        Self::execute_find_by_id(&mut **tx, id).await
+    }
+
     /// Executa o comando de inserção/atualização no PostgreSQL utilizando qualquer executor SQLx compatível.
     async fn execute_save<'e, E>(
         executor: E,
         organization: &Organization,
     ) -> Result<Organization, BusinessError>
     where
-        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+        E: sqlx::Executor<'e, Database=sqlx::Postgres>,
     {
         let (created_at, updated_at, created_by, updated_by) = match &organization.audit {
             Some(audit) => (
@@ -108,6 +117,65 @@ impl PostgresOrganizationRepository {
 
         Ok(organization.clone())
     }
+
+    /// Executa a consulta de busca por ID no PostgreSQL utilizando qualquer executor SQLx compatível.
+    async fn execute_find_by_id<'e, E>(
+        executor: E,
+        id: TSID,
+    ) -> Result<Organization, BusinessError>
+    where
+        E: sqlx::Executor<'e, Database=sqlx::Postgres>,
+    {
+        let id_raw = id.number() as i64;
+        let query = r#"
+            SELECT id, name, document_value, document_type, document_country,
+                   created_at, updated_at, created_by, updated_by
+            FROM organizations
+            WHERE id = $1 AND deleted = FALSE
+        "#;
+
+        let row_opt = sqlx::query(query)
+            .bind(id_raw)
+            .fetch_optional(executor)
+            .await
+            .map_err(|err| {
+                error!("Fail to get organization by id {}: {:?}", id, err);
+                OrganizationBusinessErrors::not_found()
+            })?;
+
+        let row = match row_opt {
+            Some(row) => row,
+            None => return Err(OrganizationBusinessErrors::not_found()),
+        };
+
+        let id_raw: i64 = row_get_field(&row, "id")?;
+        let name: String = row_get_field(&row, "name")?;
+        let doc_value: String = row_get_field(&row, "document_value")?;
+        let doc_type_str: String = row_get_field(&row, "document_type")?;
+        let doc_country: Option<String> = row_get_field(&row, "document_country")?;
+        let created_at: chrono::DateTime<chrono::Utc> = row_get_field(&row, "created_at")?;
+        let updated_at: chrono::DateTime<chrono::Utc> = row_get_field(&row, "updated_at")?;
+        let created_by: String = row_get_field(&row, "created_by")?;
+        let updated_by: String = row_get_field(&row, "updated_by")?;
+
+        let country = doc_country.as_deref().map(Country::from_code);
+        let document_type = DocumentType::from_code(&doc_type_str, country);
+        let document = Document::new(doc_value, document_type);
+        let audit = AuditFields {
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+        };
+
+        let organization = Organization::new(
+            OrganizationId::new(TSID::from(id_raw as u64)),
+            name,
+            document,
+        ).with_audit(audit);
+
+        Ok(organization)
+    }
 }
 
 impl From<PgPool> for PostgresOrganizationRepository {
@@ -135,6 +203,10 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         organization: &Organization,
     ) -> Result<Organization, BusinessError> {
         Self::execute_save(&self.pool, organization).await
+    }
+
+    async fn find_by_id(&self, id: TSID) -> Result<Organization, BusinessError> {
+        Self::execute_find_by_id(&self.pool, id).await
     }
 }
 

@@ -2054,6 +2054,7 @@ dependencies = [
  "lazy_static",
  "phf",
  "rand 0.8.8",
+ "serde",
 ]
 
 [[package]]

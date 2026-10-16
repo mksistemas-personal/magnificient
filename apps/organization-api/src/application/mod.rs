@@ -4,5 +4,5 @@ pub mod add_organization_service;
 pub mod update_organization_service;
 
 pub use add_organization_service::{AddOrganizationRequest, AddOrganizationServiceImpl};
-pub use update_organization_service::{UpdateOrganizationRequest};
+pub use update_organization_service::{UpdateOrganizationRequest, UpdateOrganizationServiceImpl};
 pub use crate::errors::{OrganizationBusinessErrors, OrganizationErrors};

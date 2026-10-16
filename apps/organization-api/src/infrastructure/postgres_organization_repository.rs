@@ -158,25 +158,8 @@ impl PostgresOrganizationRepository {
         let created_by: String = row_get_field(&row, "created_by")?;
         let updated_by: String = row_get_field(&row, "updated_by")?;
 
-        let country = doc_country.map(|c| match c.to_uppercase().as_str() {
-            "BR" => Country::Brazil,
-            "AR" => Country::Argentina,
-            other => Country::Other(other.to_string()),
-        });
-
-        let document_type = match doc_type_str.to_uppercase().as_str() {
-            "CNPJ" => DocumentType::Cnpj,
-            "CPF" => DocumentType::Cpf,
-            "CUIT" => DocumentType::Cuit,
-            "CUIL" => DocumentType::Cuil,
-            "DNI" => DocumentType::Dni,
-            "PASSPORT" | "PASSAPORTE" => DocumentType::Passport,
-            other => DocumentType::Other {
-                name: other.to_string(),
-                country,
-            },
-        };
-
+        let country = doc_country.as_deref().map(Country::from_code);
+        let document_type = DocumentType::from_code(&doc_type_str, country);
         let document = Document::new(doc_value, document_type);
         let audit = AuditFields {
             created_at,
@@ -189,8 +172,7 @@ impl PostgresOrganizationRepository {
             OrganizationId::new(TSID::from(id_raw as u64)),
             name,
             document,
-        )
-            .with_audit(audit);
+        ).with_audit(audit);
 
         Ok(organization)
     }

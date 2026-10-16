@@ -1,10 +1,11 @@
-use async_trait::async_trait;
-use crate::application::errors::OrganizationBusinessErrors;
 use crate::domain::organization::{Organization, OrganizationId};
 use crate::domain::organization_repository::OrganizationRepository;
+use crate::errors::OrganizationBusinessErrors;
+use async_trait::async_trait;
 use shared::entities::BusinessError;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use tsid::TSID;
 
 /// Implementação em memória do repositório de `Organization`, ideal para testes unitários.
 #[derive(Debug, Clone, Default)]
@@ -51,5 +52,47 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
 
         map.insert(organization.id(), organization.clone());
         Ok(organization.clone())
+    }
+
+    async fn find_by_id(&self, id: TSID) -> Result<Organization, BusinessError> {
+        let org_id = OrganizationId::new(id);
+        self.items
+            .read()
+            .unwrap()
+            .get(&org_id)
+            .cloned()
+            .ok_or_else(OrganizationBusinessErrors::not_found)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use shared::entities::{AuditFields, Document, DocumentType};
+
+    #[tokio::test]
+    async fn test_in_memory_find_by_id_success() {
+        let repo = InMemoryOrganizationRepository::new();
+        let org_id = OrganizationId::new(TSID::from(100u64));
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Empresa Teste", doc)
+            .with_audit(AuditFields::created("admin"));
+
+        repo.save(&org).await.unwrap();
+
+        let found = OrganizationRepository::find_by_id(&repo, TSID::from(100u64))
+            .await
+            .unwrap();
+        assert_eq!(found.id(), org_id);
+        assert_eq!(found.name(), "Empresa Teste");
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_find_by_id_not_found() {
+        let repo = InMemoryOrganizationRepository::new();
+        let result = OrganizationRepository::find_by_id(&repo, TSID::from(999u64)).await;
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), OrganizationBusinessErrors::not_found());
     }
 }

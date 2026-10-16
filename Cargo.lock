@@ -1507,6 +1507,7 @@ dependencies = [
  "axum",
  "chrono",
  "serde",
+ "sqlx",
  "tokio",
  "tsid",
 ]

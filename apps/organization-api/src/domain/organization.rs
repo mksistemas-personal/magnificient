@@ -30,6 +30,17 @@ impl Organization {
         self
     }
 
+    pub fn update(&mut self, name: impl Into<String>, updated_by: impl Into<String>) -> &mut Self {
+        self.name = name.into();
+        let updated_by = updated_by.into();
+        if let Some(audit) = self.audit.as_mut() {
+            audit.updated(updated_by);
+        } else {
+            self.audit = Some(AuditFields::created(updated_by));
+        }
+        self
+    }
+
     pub fn id(&self) -> OrganizationId {
         self.id
     }
@@ -57,5 +68,34 @@ mod tests {
         assert_eq!(org.id(), OrganizationId::new(TSID::from(100u64)));
         assert_eq!(org.name(), "Minha Empresa");
         assert_eq!(org.document().value(), "00.000.000/0001-91");
+    }
+
+    #[test]
+    fn test_update_organization_with_existing_audit() {
+        let org_id = OrganizationId::new(TSID::from(100u64));
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let mut org = Organization::new(org_id, "Nome Antigo", doc)
+            .with_audit(AuditFields::created("admin"));
+
+        org.update("Novo Nome", "editor");
+
+        assert_eq!(org.name(), "Novo Nome");
+        let audit = org.audit.as_ref().unwrap();
+        assert_eq!(audit.created_by(), "admin");
+        assert_eq!(audit.updated_by(), "editor");
+    }
+
+    #[test]
+    fn test_update_organization_without_existing_audit() {
+        let org_id = OrganizationId::new(TSID::from(100u64));
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let mut org = Organization::new(org_id, "Nome Antigo", doc);
+
+        org.update("Novo Nome", "editor");
+
+        assert_eq!(org.name(), "Novo Nome");
+        let audit = org.audit.as_ref().unwrap();
+        assert_eq!(audit.created_by(), "editor");
+        assert_eq!(audit.updated_by(), "editor");
     }
 }

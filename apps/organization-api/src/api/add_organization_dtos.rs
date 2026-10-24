@@ -1,6 +1,7 @@
 use crate::api::organization_shared_dtos::default_document_type;
+use crate::api::organization_shared_dtos::default_user;
 use crate::api::organization_shared_dtos::parse_document_type;
-use crate::application::add_organization_service::AddOrganizationRequest;
+use crate::application::addusecase::data::AddOrganizationRequest;
 use serde::{Deserialize, Serialize};
 use shared::errors::api_error::ApiError;
 
@@ -10,6 +11,7 @@ pub struct CreateOrganizationDto {
     pub document_value: String,
     #[serde(default = "default_document_type")]
     pub document_type: String,
+    #[serde(default = "default_user")]
     pub created_by: String,
 }
 
@@ -18,6 +20,7 @@ impl TryFrom<CreateOrganizationDto> for AddOrganizationRequest {
 
     fn try_from(dto: CreateOrganizationDto) -> Result<Self, Self::Error> {
         let document_type = parse_document_type(&dto.document_type)?;
+
         Ok(AddOrganizationRequest {
             name: dto.name,
             document_value: dto.document_value,
@@ -26,7 +29,6 @@ impl TryFrom<CreateOrganizationDto> for AddOrganizationRequest {
         })
     }
 }
-
 
 #[cfg(test)]
 mod tests {

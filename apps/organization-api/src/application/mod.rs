@@ -1,8 +1,10 @@
 // Casos de uso e serviços da aplicação
 
-pub mod add_organization_service;
-pub mod update_organization_service;
+pub mod addusecase;
+pub mod deleteusecase;
+pub mod updateusecase;
 
-pub use add_organization_service::{AddOrganizationRequest, AddOrganizationServiceImpl};
-pub use update_organization_service::{UpdateOrganizationRequest, UpdateOrganizationServiceImpl};
 pub use crate::errors::{OrganizationBusinessErrors, OrganizationErrors};
+pub use addusecase::{AddOrganizationRequest, AddOrganizationService};
+pub use deleteusecase::{DeleteOrganizationRequest, DeleteOrganizationService};
+pub use updateusecase::{UpdateOrganizationRequest, UpdateOrganizationService};

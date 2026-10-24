@@ -1,9 +1,8 @@
 use crate::api::handlers::{health, organizations_controller};
 use crate::api::state::AppState;
-use axum::routing::put;
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -18,7 +17,11 @@ pub fn create_router(state: AppState) -> Router {
         .route("/health", get(health::health_check))
         .route("/api/v1/health", get(health::health_check))
         .route("/api/v1/organizations", post(organizations_controller::create_organization))
-        .route("/api/v1/organizations/{id}", put(organizations_controller::update_organization))
+        .route(
+            "/api/v1/organizations/{id}",
+            put(organizations_controller::update_organization)
+                .delete(organizations_controller::delete_organization),
+        )
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)
@@ -356,5 +359,112 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_delete_organization_success() {
+        let repo = InMemoryOrganizationRepository::new();
+        let org_id = OrganizationId::new(create_tsid());
+        let id_str = org_id.to_string();
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Acme Corp Para Deletar", doc)
+            .with_audit(AuditFields::created("autor_original"));
+        repo.save(&org).await.unwrap();
+
+        let app = create_router(create_test_state_with_repo(repo.clone()));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/organizations/{id_str}?update_by=admin_deleter"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        // Verifica se a organização foi removida do repositório
+        assert!(repo.find_by_id(&org_id).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_organization_with_updated_by_alias() {
+        let repo = InMemoryOrganizationRepository::new();
+        let org_id = OrganizationId::new(create_tsid());
+        let id_str = org_id.to_string();
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Acme Corp Para Deletar", doc)
+            .with_audit(AuditFields::created("autor_original"));
+        repo.save(&org).await.unwrap();
+
+        let app = create_router(create_test_state_with_repo(repo.clone()));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/organizations/{id_str}?updated_by=admin_deleter"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn test_delete_organization_not_found() {
+        let app = create_router(create_test_state());
+        let nonexistent_id = create_tsid().to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/organizations/{nonexistent_id}?update_by=admin"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = to_bytes(response.into_body(), 1024 * 64).await.unwrap();
+        let json_body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json_body["code"], "NOT_FOUND");
+        assert_eq!(json_body["status"], 404);
+    }
+
+    #[tokio::test]
+    async fn test_delete_organization_empty_updater() {
+        let repo = InMemoryOrganizationRepository::new();
+        let org_id = OrganizationId::new(create_tsid());
+        let id_str = org_id.to_string();
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Acme Corp", doc);
+        repo.save(&org).await.unwrap();
+
+        let app = create_router(create_test_state_with_repo(repo));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/organizations/{id_str}?update_by=%20%20%20"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), 1024 * 64).await.unwrap();
+        let json_body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json_body["code"], "BAD_REQUEST");
+        assert_eq!(json_body["status"], 400);
     }
 }

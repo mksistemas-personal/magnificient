@@ -1,10 +1,12 @@
-use crate::application::UpdateOrganizationRequest;
+use crate::api::organization_shared_dtos::default_user;
+use crate::application::updateusecase::data::UpdateOrganizationRequest;
 use crate::domain::OrganizationId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UpdateOrganizationDto {
     pub name: String,
+    #[serde(default = "default_user")]
     pub updated_by: String,
 }
 

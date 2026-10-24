@@ -28,6 +28,12 @@ pub trait AsyncUpdateEntityUseCase<Request, Response>: Send + Sync {
     async fn execute(&self, request: Request) -> Result<Response, BusinessError>;
 }
 
+/// Trait para casos de uso assíncronos de exclusão de entidades que retornam `Result<Response, BusinessError>`.
+#[async_trait]
+pub trait AsyncDeleteEntityUseCase<Request, Response = ()>: Send + Sync {
+    async fn execute(&self, request: Request) -> Result<Response, BusinessError>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,6 +102,22 @@ mod tests {
             dyn_async_add_uc.execute("dyn".to_string()).await.unwrap(),
             "async_created:dyn"
         );
+
+        struct DummyAsyncDeleteUseCase;
+        #[async_trait]
+        impl AsyncDeleteEntityUseCase<String, ()> for DummyAsyncDeleteUseCase {
+            async fn execute(&self, request: String) -> Result<(), BusinessError> {
+                if request.is_empty() {
+                    Err(BusinessError::validation("empty delete"))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+
+        let async_delete_uc = DummyAsyncDeleteUseCase;
+        assert!(async_delete_uc.execute("id123".to_string()).await.is_ok());
+        assert!(async_delete_uc.execute("".to_string()).await.is_err());
     }
 }
 

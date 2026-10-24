@@ -42,5 +42,5 @@ pub async fn delete_organization(
     let organization_id: OrganizationId = id.into();
     let request: DeleteOrganizationRequest = params.into_request(organization_id);
     state.delete_organization_use_case.execute(request).await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(StatusCode::OK)
 }

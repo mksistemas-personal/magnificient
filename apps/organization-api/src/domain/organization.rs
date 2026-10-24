@@ -1,7 +1,6 @@
 use shared::entities::audit::audit_fields::AuditFields;
 use shared::entities::{Document, EntityId};
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct OrganizationMarker;
 
@@ -74,8 +73,8 @@ mod tests {
     fn test_update_organization_with_existing_audit() {
         let org_id = OrganizationId::new(TSID::from(100u64));
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
-        let mut org = Organization::new(org_id, "Nome Antigo", doc)
-            .with_audit(AuditFields::created("admin"));
+        let mut org =
+            Organization::new(org_id, "Nome Antigo", doc).with_audit(AuditFields::created("admin"));
 
         org.update("Novo Nome", "editor");
 

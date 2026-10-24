@@ -1,4 +1,5 @@
 pub mod add_organization_dtos;
+pub mod delete_organization_dtos;
 pub mod handlers;
 pub mod routes;
 pub mod state;

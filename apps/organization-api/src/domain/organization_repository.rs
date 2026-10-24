@@ -13,4 +13,7 @@ pub trait OrganizationRepository: Send + Sync {
     ) -> Result<Organization, BusinessError>;
 
     async fn find_by_id(&self, id: TSID) -> Result<Organization, BusinessError>;
+
+    /// Remove logicamente uma organização pelo seu identificador TSID.
+    async fn delete(&self, id: TSID, updated_by: &str) -> Result<(), BusinessError>;
 }

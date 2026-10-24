@@ -35,10 +35,16 @@ pub fn default_document_type() -> String {
     "CNPJ".to_string()
 }
 
+pub fn default_user() -> String {
+    "system".to_string()
+}
+
 pub fn parse_document_type(doc_type_str: &str) -> Result<DocumentType, ApiError> {
     let doc_type = doc_type_str.trim().to_uppercase();
     if doc_type.is_empty() {
-        return Err(ApiError::BadRequest(OrganizationBusinessErrors::ORG_DOCUMENT_INVALID.to_string()));
+        return Err(ApiError::BadRequest(
+            OrganizationBusinessErrors::ORG_DOCUMENT_INVALID.to_string(),
+        ));
     }
     Ok(DocumentType::from_code(&doc_type, None))
 }

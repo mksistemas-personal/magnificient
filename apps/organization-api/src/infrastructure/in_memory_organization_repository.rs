@@ -63,6 +63,15 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
             .cloned()
             .ok_or_else(OrganizationBusinessErrors::not_found)
     }
+
+    async fn delete(&self, id: TSID, _updated_by: &str) -> Result<(), BusinessError> {
+        let org_id = OrganizationId::new(id);
+        let mut map = self.items.write().unwrap();
+        if map.remove(&org_id).is_none() {
+            return Err(OrganizationBusinessErrors::not_found());
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -91,6 +100,33 @@ mod tests {
     async fn test_in_memory_find_by_id_not_found() {
         let repo = InMemoryOrganizationRepository::new();
         let result = OrganizationRepository::find_by_id(&repo, TSID::from(999u64)).await;
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), OrganizationBusinessErrors::not_found());
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_delete_success() {
+        let repo = InMemoryOrganizationRepository::new();
+        let org_id = OrganizationId::new(TSID::from(100u64));
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Empresa Teste", doc)
+            .with_audit(AuditFields::created("admin"));
+
+        repo.save(&org).await.unwrap();
+
+        let delete_res = OrganizationRepository::delete(&repo, TSID::from(100u64), "admin_delete").await;
+        assert!(delete_res.is_ok());
+
+        let find_res = OrganizationRepository::find_by_id(&repo, TSID::from(100u64)).await;
+        assert!(find_res.is_err());
+        assert_eq!(find_res.unwrap_err(), OrganizationBusinessErrors::not_found());
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_delete_not_found() {
+        let repo = InMemoryOrganizationRepository::new();
+        let result = OrganizationRepository::delete(&repo, TSID::from(999u64), "admin_delete").await;
 
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), OrganizationBusinessErrors::not_found());

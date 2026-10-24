@@ -131,3 +131,63 @@ async fn test_create_organization_invalid_json() {
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn test_create_and_delete_organization_flow() {
+    let app = setup_test_app();
+
+    // 1. Criar organização
+    let payload = json!({
+        "name": "Org Para Deletar",
+        "document_value": "00.000.000/0001-91",
+        "document_type": "CNPJ",
+        "created_by": "criador"
+    });
+
+    let res_create = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/organizations")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res_create.status(), StatusCode::CREATED);
+    let body = to_bytes(res_create.into_body(), 1024 * 64).await.unwrap();
+    let json_body: Value = serde_json::from_slice(&body).unwrap();
+    let org_id = json_body["id"].as_str().unwrap();
+
+    // 2. Deletar organização via DELETE /api/v1/organizations/{id}?update_by=deleter
+    let res_delete = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/organizations/{org_id}?update_by=deleter"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res_delete.status(), StatusCode::NO_CONTENT);
+
+    // 3. Tentar deletar novamente deve retornar 404 (já deletada)
+    let res_delete_again = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/organizations/{org_id}?update_by=deleter"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res_delete_again.status(), StatusCode::NOT_FOUND);
+}

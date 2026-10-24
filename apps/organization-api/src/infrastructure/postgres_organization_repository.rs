@@ -48,13 +48,22 @@ impl PostgresOrganizationRepository {
         Self::execute_find_by_id(&mut **tx, id).await
     }
 
+    /// Remove logicamente uma organização pelo ID utilizando uma transação ativa do SQLx (`Transaction<'_, Postgres>`).
+    pub async fn delete_with_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: TSID,
+        updated_by: &str,
+    ) -> Result<(), BusinessError> {
+        Self::execute_delete(&mut **tx, id, updated_by).await
+    }
+
     /// Executa o comando de inserção/atualização no PostgreSQL utilizando qualquer executor SQLx compatível.
     async fn execute_save<'e, E>(
         executor: E,
         organization: &Organization,
     ) -> Result<Organization, BusinessError>
     where
-        E: sqlx::Executor<'e, Database=sqlx::Postgres>,
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
     {
         let (created_at, updated_at, created_by, updated_by) = match &organization.audit {
             Some(audit) => (
@@ -119,12 +128,9 @@ impl PostgresOrganizationRepository {
     }
 
     /// Executa a consulta de busca por ID no PostgreSQL utilizando qualquer executor SQLx compatível.
-    async fn execute_find_by_id<'e, E>(
-        executor: E,
-        id: TSID,
-    ) -> Result<Organization, BusinessError>
+    async fn execute_find_by_id<'e, E>(executor: E, id: TSID) -> Result<Organization, BusinessError>
     where
-        E: sqlx::Executor<'e, Database=sqlx::Postgres>,
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
     {
         let id_raw = id.number() as i64;
         let query = r#"
@@ -172,9 +178,45 @@ impl PostgresOrganizationRepository {
             OrganizationId::new(TSID::from(id_raw as u64)),
             name,
             document,
-        ).with_audit(audit);
+        )
+        .with_audit(audit);
 
         Ok(organization)
+    }
+
+    /// Executa o comando de exclusão lógica (soft delete) no PostgreSQL utilizando qualquer executor SQLx compatível.
+    async fn execute_delete<'e, E>(
+        executor: E,
+        id: TSID,
+        updated_by: &str,
+    ) -> Result<(), BusinessError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        let id_raw = id.number() as i64;
+        let now = chrono::Utc::now();
+        let query = r#"
+            UPDATE organizations
+            SET deleted = TRUE, updated_at = $2, updated_by = $3
+            WHERE id = $1 AND deleted = FALSE
+        "#;
+
+        let result = sqlx::query(query)
+            .bind(id_raw)
+            .bind(now)
+            .bind(updated_by)
+            .execute(executor)
+            .await
+            .map_err(|err| {
+                error!("Fail to delete organization by id {}: {:?}", id, err);
+                BusinessError::internal(format!("Falha ao deletar organização: {err}"))
+            })?;
+
+        if result.rows_affected() == 0 {
+            return Err(OrganizationBusinessErrors::not_found());
+        }
+
+        Ok(())
     }
 }
 
@@ -198,15 +240,16 @@ impl From<&DatabaseConnection> for PostgresOrganizationRepository {
 
 #[async_trait]
 impl OrganizationRepository for PostgresOrganizationRepository {
-    async fn save(
-        &self,
-        organization: &Organization,
-    ) -> Result<Organization, BusinessError> {
+    async fn save(&self, organization: &Organization) -> Result<Organization, BusinessError> {
         Self::execute_save(&self.pool, organization).await
     }
 
     async fn find_by_id(&self, id: TSID) -> Result<Organization, BusinessError> {
         Self::execute_find_by_id(&self.pool, id).await
+    }
+
+    async fn delete(&self, id: TSID, updated_by: &str) -> Result<(), BusinessError> {
+        Self::execute_delete(&self.pool, id, updated_by).await
     }
 }
 

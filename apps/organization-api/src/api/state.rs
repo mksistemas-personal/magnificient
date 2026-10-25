@@ -13,9 +13,12 @@ use crate::domain::organization::Organization;
 use crate::domain::organization_repository::OrganizationRepository;
 use crate::infrastructure::postgres_organization_repository::PostgresOrganizationRepository;
 use database::DatabaseConnection;
+use messaging::RabbitMqPublisher;
 use shared::entities::AsyncAddEntityUseCase;
 use shared::entities::use_case::use_case_traits::AsyncUpdateEntityUseCase;
-use shared::entities::use_case::{AsyncDeleteEntityUseCase, AsyncGetAllUseCase, AsyncGetByIdUseCase};
+use shared::entities::use_case::{
+    AsyncDeleteEntityUseCase, AsyncGetAllUseCase, AsyncGetByIdUseCase,
+};
 use shared::types::page::Page;
 use std::sync::Arc;
 
@@ -23,6 +26,7 @@ use std::sync::Arc;
 pub struct AppState {
     pub config: Arc<OrganizationAppConfig>,
     pub db: DatabaseConnection,
+    pub message_publisher: Option<Arc<RabbitMqPublisher>>,
     pub add_organization_use_case:
         Arc<dyn AsyncAddEntityUseCase<AddOrganizationRequest, Organization>>,
     pub update_organization_use_case:
@@ -42,6 +46,7 @@ impl AppState {
         Self {
             config,
             db,
+            message_publisher: None,
             add_organization_use_case: Arc::new(AddOrganizationService::new_with_uow(
                 repository.clone(),
                 uow.clone(),
@@ -64,6 +69,21 @@ impl AppState {
         }
     }
 
+    pub fn new_with_publisher(
+        config: Arc<OrganizationAppConfig>,
+        db: DatabaseConnection,
+        message_publisher: Arc<RabbitMqPublisher>,
+    ) -> Self {
+        let mut state = Self::new(config, db);
+        state.message_publisher = Some(message_publisher);
+        state
+    }
+
+    pub fn with_message_publisher(mut self, message_publisher: Arc<RabbitMqPublisher>) -> Self {
+        self.message_publisher = Some(message_publisher);
+        self
+    }
+
     pub fn new_with_repository(
         config: Arc<OrganizationAppConfig>,
         db: DatabaseConnection,
@@ -72,6 +92,7 @@ impl AppState {
         Self {
             config,
             db,
+            message_publisher: None,
             add_organization_use_case: Arc::new(AddOrganizationService::new(repository.clone())),
             update_organization_use_case: Arc::new(UpdateOrganizationService::new(
                 repository.clone(),
@@ -93,11 +114,14 @@ impl AppState {
         update_use_case: Arc<dyn AsyncUpdateEntityUseCase<UpdateOrganizationRequest, Organization>>,
         delete_use_case: Arc<dyn AsyncDeleteEntityUseCase<DeleteOrganizationRequest, ()>>,
         get_by_id_use_case: Arc<dyn AsyncGetByIdUseCase<GetOrganizationByIdRequest, Organization>>,
-        get_all_use_case: Arc<dyn AsyncGetAllUseCase<FindAllOrganizationsRequest, Page<Organization>>>,
+        get_all_use_case: Arc<
+            dyn AsyncGetAllUseCase<FindAllOrganizationsRequest, Page<Organization>>,
+        >,
     ) -> Self {
         Self {
             config,
             db,
+            message_publisher: None,
             add_organization_use_case: add_use_case,
             update_organization_use_case: update_use_case,
             delete_organization_use_case: delete_use_case,
@@ -112,5 +136,62 @@ impl AppState {
 
     pub fn config(&self) -> &OrganizationAppConfig {
         &self.config
+    }
+
+    pub fn message_publisher(&self) -> Option<&Arc<RabbitMqPublisher>> {
+        self.message_publisher.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::organization_config::{
+        DatabaseConfig, LoggingConfig, OrganizationAppConfig, ServerConfig,
+    };
+    use crate::infrastructure::in_memory_organization_repository::InMemoryOrganizationRepository;
+    use messaging::RabbitMqConfig;
+
+    fn create_test_config() -> Arc<OrganizationAppConfig> {
+        Arc::new(OrganizationAppConfig {
+            server: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 8080,
+            },
+            database: DatabaseConfig {
+                host: "localhost".to_string(),
+                port: 5432,
+                name: "test".to_string(),
+                username: "postgres".to_string(),
+                password: "password".to_string(),
+                max_connections: None,
+                min_connections: None,
+                acquire_timeout_secs: None,
+            },
+            rabbitmq: RabbitMqConfig {
+                rabbitmq_url: "amqp://guest:guest@localhost:5672".to_string(),
+                rabbitmq_prefetch_count: 10,
+                rabbitmq_reconnect_max_attempts: 3,
+                rabbitmq_reconnect_initial_ms: 100,
+                rabbitmq_reconnect_max_ms: 1000,
+                rabbitmq_retry_max_attempts: 3,
+                rabbitmq_retry_initial_ms: 100,
+                rabbitmq_retry_max_ms: 1000,
+            },
+            logging: LoggingConfig {
+                level: "info".to_string(),
+            },
+        })
+    }
+
+    #[tokio::test]
+    async fn test_app_state_initialization() {
+        let config = create_test_config();
+        let db = DatabaseConnection::connect_lazy_with_config(&config.database.to_connection_config());
+        let repo = InMemoryOrganizationRepository::new();
+        let state = AppState::new_with_repository(Arc::clone(&config), db, repo);
+
+        assert_eq!(state.config().server.port, 8080);
+        assert!(state.message_publisher().is_none());
     }
 }

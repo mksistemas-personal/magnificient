@@ -1,11 +1,13 @@
 use config::{Config, ConfigError};
 use database::DatabaseConnectionConfig;
+use messaging::RabbitMqConfig;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct OrganizationAppConfig {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
+    pub rabbitmq: RabbitMqConfig,
     pub logging: LoggingConfig,
 }
 
@@ -74,10 +76,7 @@ impl OrganizationAppConfig {
     pub fn load() -> Result<Self, ConfigError> {
         let settings = Config::builder()
             .add_source(config::File::with_name("apps/organization-api/cfg/default"))
-            .add_source(
-                config::Environment::with_prefix("APP")
-                    .separator("__"),
-            )
+            .add_source(config::Environment::with_prefix("APP").separator("__"))
             .build()?;
         settings.try_deserialize()
     }
@@ -104,6 +103,16 @@ mod tests {
                 max_connections: None,
                 min_connections: None,
                 acquire_timeout_secs: None,
+            },
+            rabbitmq: RabbitMqConfig {
+                rabbitmq_url: "amqp://rabbitmq:rabbitmq@localhost:5672/%2f".to_string(),
+                rabbitmq_prefetch_count: 10,
+                rabbitmq_reconnect_max_attempts: 0,
+                rabbitmq_reconnect_initial_ms: 1000,
+                rabbitmq_reconnect_max_ms: 30000,
+                rabbitmq_retry_max_attempts: 3,
+                rabbitmq_retry_initial_ms: 1000,
+                rabbitmq_retry_max_ms: 10000,
             },
             logging: LoggingConfig {
                 level: "info".to_string(),

@@ -43,6 +43,7 @@ mod tests {
     use crate::infrastructure::in_memory_organization_repository::InMemoryOrganizationRepository;
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode, header};
+    use messaging::RabbitMqConfig;
     use serde_json::{Value, json};
     use shared::entities::{AuditFields, Document, DocumentType};
     use std::sync::Arc;
@@ -64,6 +65,16 @@ mod tests {
                 max_connections: None,
                 min_connections: None,
                 acquire_timeout_secs: None,
+            },
+            rabbitmq: RabbitMqConfig {
+                rabbitmq_url: "amqp://rabbitmq:rabbitmq@localhost:5672/%2f".to_string(),
+                rabbitmq_prefetch_count: 10,
+                rabbitmq_reconnect_max_attempts: 0,
+                rabbitmq_reconnect_initial_ms: 1000,
+                rabbitmq_reconnect_max_ms: 30000,
+                rabbitmq_retry_max_attempts: 3,
+                rabbitmq_retry_initial_ms: 1000,
+                rabbitmq_retry_max_ms: 10000,
             },
             logging: LoggingConfig {
                 level: "debug".to_string(),
@@ -561,7 +572,8 @@ mod tests {
                 format!("Beta Corp {}", i)
             };
             let doc = Document::new(format!("{:014}", i), DocumentType::Cnpj);
-            let org = Organization::new(org_id, name, doc).with_audit(AuditFields::created("admin"));
+            let org =
+                Organization::new(org_id, name, doc).with_audit(AuditFields::created("admin"));
             repo.save(&org).await.unwrap();
         }
 

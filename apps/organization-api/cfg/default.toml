@@ -9,5 +9,15 @@ name = "magnificient"
 username = "admin"
 password = "admin@123"
 
+[rabbitmq]
+rabbitmq_url = "amqp://admin:admin@123@localhost:5672/magnificient"
+rabbitmq_prefetch_count = 10
+rabbitmq_reconnect_max_attempts = 0
+rabbitmq_reconnect_initial_ms = 1000
+rabbitmq_reconnect_max_ms = 30000
+rabbitmq_retry_max_attempts = 3
+rabbitmq_retry_initial_ms = 1000
+rabbitmq_retry_max_ms = 10000
+
 [logging]
 level = "info"

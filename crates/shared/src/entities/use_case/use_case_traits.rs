@@ -34,6 +34,11 @@ pub trait AsyncDeleteEntityUseCase<Request, Response = ()>: Send + Sync {
     async fn execute(&self, request: Request) -> Result<Response, BusinessError>;
 }
 
+#[async_trait]
+pub trait AsyncGetByIdUseCase<Request, Response>: Send + Sync {
+    async fn execute(&self, request: Request) -> Result<Response, BusinessError>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,7 +87,10 @@ mod tests {
         assert_eq!(sync_uc.execute(5), 10);
 
         let sync_add_uc = DummySyncAddEntityUseCase;
-        assert_eq!(sync_add_uc.execute("test".to_string()).unwrap(), "created:test");
+        assert_eq!(
+            sync_add_uc.execute("test".to_string()).unwrap(),
+            "created:test"
+        );
         assert!(sync_add_uc.execute("".to_string()).is_err());
 
         let async_uc = DummyAsyncUseCase;
@@ -120,5 +128,3 @@ mod tests {
         assert!(async_delete_uc.execute("".to_string()).await.is_err());
     }
 }
-
-

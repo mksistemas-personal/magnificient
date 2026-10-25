@@ -1,10 +1,12 @@
 use crate::api::add_organization_dtos::CreateOrganizationDto;
 use crate::api::delete_organization_dtos::DeleteOrganizationParams;
+use crate::api::find_all_organization_dtos::FindAllOrganizationsParams;
 use crate::api::organization_shared_dtos::OrganizationResponseDto;
 use crate::api::state::AppState;
 use crate::api::update_organization_dtos::UpdateOrganizationDto;
 use crate::application::FindOrganizationByIdRequest;
 use crate::application::addusecase::data::AddOrganizationRequest;
+use crate::application::allusecase::data::FindAllOrganizationsRequest;
 use crate::application::deleteusecase::data::DeleteOrganizationRequest;
 use crate::application::updateusecase::data::UpdateOrganizationRequest;
 use crate::domain::OrganizationId;
@@ -43,7 +45,7 @@ pub async fn delete_organization(
     let organization_id: OrganizationId = id.into();
     let request: DeleteOrganizationRequest = params.into_request(organization_id);
     state.delete_organization_use_case.execute(request).await?;
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn getbyid_organization(
@@ -59,3 +61,17 @@ pub async fn getbyid_organization(
     let response = OrganizationResponseDto::from(organization);
     Ok((StatusCode::OK, Json(response)))
 }
+
+pub async fn get_all_organizations(
+    State(state): State<AppState>,
+    Query(params): Query<FindAllOrganizationsParams>,
+) -> Result<impl IntoResponse, ApiError> {
+    let request: FindAllOrganizationsRequest = params.into_request();
+    let page = state.get_all_organization_use_case.execute(request).await?;
+    let response = page.map(OrganizationResponseDto::from);
+    Ok((StatusCode::OK, Json(response)))
+}
+
+pub use get_all_organizations as find_all_organizations;
+pub use get_all_organizations as getall_organizations;
+pub use getbyid_organization as get_organization_by_id;

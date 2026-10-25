@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use database::DatabaseConnection;
 use shared::entities::{AuditFields, BusinessError, Country, Document, DocumentType, TSID};
 use shared::row_get_field;
+use shared::types::page::PageRequest;
 use sqlx::PgPool;
 use tracing::error;
 
@@ -55,6 +56,23 @@ impl PostgresOrganizationRepository {
         updated_by: &str,
     ) -> Result<(), BusinessError> {
         Self::execute_delete(&mut **tx, id, updated_by).await
+    }
+
+    /// Consulta organizações aplicando filtro opcional por nome e paginação por PageRequest utilizando uma transação ativa do SQLx.
+    pub async fn find_all_with_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        name: Option<&str>,
+        page_request: &PageRequest,
+    ) -> Result<Vec<Organization>, BusinessError> {
+        Self::execute_find_all(&mut **tx, name, page_request).await
+    }
+
+    /// Retorna a quantidade total de organizações que atendem ao filtro opcional por nome utilizando uma transação ativa do SQLx.
+    pub async fn count_with_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        name: Option<&str>,
+    ) -> Result<u64, BusinessError> {
+        Self::execute_count(&mut **tx, name).await
     }
 
     /// Executa o comando de inserção/atualização no PostgreSQL utilizando qualquer executor SQLx compatível.
@@ -218,6 +236,122 @@ impl PostgresOrganizationRepository {
 
         Ok(())
     }
+
+    /// Executa a consulta paginada com filtro opcional por nome no PostgreSQL utilizando qualquer executor SQLx compatível.
+    async fn execute_find_all<'e, E>(
+        executor: E,
+        name: Option<&str>,
+        page_request: &PageRequest,
+    ) -> Result<Vec<Organization>, BusinessError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        let name_filter = name.map(|n| n.trim()).filter(|n| !n.is_empty());
+        let limit = page_request.limit() as i64;
+        let offset = page_request.offset() as i64;
+
+        let rows = if let Some(filter) = name_filter {
+            let pattern = format!("%{filter}%");
+            let query = r#"
+                SELECT id, name, document_value, document_type, document_country,
+                       created_at, updated_at, created_by, updated_by
+                FROM organizations
+                WHERE deleted = FALSE AND name ILIKE $1
+                ORDER BY name, id
+                LIMIT $2 OFFSET $3
+            "#;
+            sqlx::query(query)
+                .bind(pattern)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(executor)
+                .await
+        } else {
+            let query = r#"
+                SELECT id, name, document_value, document_type, document_country,
+                       created_at, updated_at, created_by, updated_by
+                FROM organizations
+                WHERE deleted = FALSE
+                ORDER BY name, id
+                LIMIT $1 OFFSET $2
+            "#;
+            sqlx::query(query)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(executor)
+                .await
+        };
+
+        let rows = rows.map_err(|err| {
+            error!("Fail to list organizations: {:?}", err);
+            BusinessError::internal(format!("Falha ao consultar organizações: {err}"))
+        })?;
+
+        let mut organizations = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id_raw: i64 = row_get_field(&row, "id")?;
+            let name: String = row_get_field(&row, "name")?;
+            let doc_value: String = row_get_field(&row, "document_value")?;
+            let doc_type_str: String = row_get_field(&row, "document_type")?;
+            let doc_country: Option<String> = row_get_field(&row, "document_country")?;
+            let created_at: chrono::DateTime<chrono::Utc> = row_get_field(&row, "created_at")?;
+            let updated_at: chrono::DateTime<chrono::Utc> = row_get_field(&row, "updated_at")?;
+            let created_by: String = row_get_field(&row, "created_by")?;
+            let updated_by: String = row_get_field(&row, "updated_by")?;
+
+            let country = doc_country.as_deref().map(Country::from_code);
+            let document_type = DocumentType::from_code(&doc_type_str, country);
+            let document = Document::new(doc_value, document_type);
+            let audit = AuditFields {
+                created_at,
+                updated_at,
+                created_by,
+                updated_by,
+            };
+
+            let organization = Organization::new(
+                OrganizationId::new(TSID::from(id_raw as u64)),
+                name,
+                document,
+            )
+            .with_audit(audit);
+
+            organizations.push(organization);
+        }
+
+        Ok(organizations)
+    }
+
+    /// Executa a contagem de organizações que atendem ao filtro opcional por nome no PostgreSQL.
+    async fn execute_count<'e, E>(
+        executor: E,
+        name: Option<&str>,
+    ) -> Result<u64, BusinessError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        let name_filter = name.map(|n| n.trim()).filter(|n| !n.is_empty());
+        let count_res: Result<i64, _> = if let Some(filter) = name_filter {
+            let pattern = format!("%{filter}%");
+            let query = "SELECT COUNT(*) FROM organizations WHERE deleted = FALSE AND name ILIKE $1";
+            sqlx::query_scalar(query)
+                .bind(pattern)
+                .fetch_one(executor)
+                .await
+        } else {
+            let query = "SELECT COUNT(*) FROM organizations WHERE deleted = FALSE";
+            sqlx::query_scalar(query)
+                .fetch_one(executor)
+                .await
+        };
+
+        let total = count_res.map_err(|err| {
+            error!("Fail to count organizations: {:?}", err);
+            BusinessError::internal(format!("Falha ao contar organizações: {err}"))
+        })?;
+
+        Ok(total as u64)
+    }
 }
 
 impl From<PgPool> for PostgresOrganizationRepository {
@@ -250,6 +384,18 @@ impl OrganizationRepository for PostgresOrganizationRepository {
 
     async fn delete(&self, id: TSID, updated_by: &str) -> Result<(), BusinessError> {
         Self::execute_delete(&self.pool, id, updated_by).await
+    }
+
+    async fn find_all(
+        &self,
+        name: Option<&str>,
+        page_request: &PageRequest,
+    ) -> Result<Vec<Organization>, BusinessError> {
+        Self::execute_find_all(&self.pool, name, page_request).await
+    }
+
+    async fn count(&self, name: Option<&str>) -> Result<u64, BusinessError> {
+        Self::execute_count(&self.pool, name).await
     }
 }
 

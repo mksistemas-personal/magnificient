@@ -10,4 +10,7 @@ pub use document::{Country, Document, DocumentType};
 pub use identifier::{EntityId, Id, TSID};
 pub use use_case::async_result_ext::AsyncResultExt;
 pub use use_case::business_error::BusinessError;
-pub use use_case::use_case_traits::{AddEntityUseCase, AsyncAddEntityUseCase, AsyncUseCase, UseCase};
+pub use use_case::use_case_traits::{
+    AddEntityUseCase, AsyncAddEntityUseCase, AsyncDeleteEntityUseCase, AsyncGetAllUseCase,
+    AsyncGetByIdUseCase, AsyncUpdateEntityUseCase, AsyncUseCase, UseCase,
+};

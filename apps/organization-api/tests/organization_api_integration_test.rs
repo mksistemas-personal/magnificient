@@ -191,3 +191,76 @@ async fn test_create_and_delete_organization_flow() {
 
     assert_eq!(res_delete_again.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn test_create_and_get_all_organizations_flow() {
+    let app = setup_test_app();
+
+    // 1. Criar organizações
+    let cnpjs = ["00.000.000/0001-91", "11.222.333/0001-81", "12.345.678/0001-95"];
+    for (i, cnpj) in cnpjs.iter().enumerate() {
+        let payload = json!({
+            "name": format!("Empresa Teste {}", i + 1),
+            "document_value": cnpj,
+            "document_type": "CNPJ",
+            "created_by": "sistema"
+        });
+
+        let res = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/organizations")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), StatusCode::CREATED);
+    }
+
+    // 2. Listar todas sem filtro
+    let res_list = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/organizations")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res_list.status(), StatusCode::OK);
+    let body = to_bytes(res_list.into_body(), 1024 * 64).await.unwrap();
+    let json_body: Value = serde_json::from_slice(&body).unwrap();
+    let list = json_body["content"].as_array().unwrap();
+    assert_eq!(list.len(), 3);
+    assert_eq!(json_body["total_elements"], 3);
+    assert_eq!(json_body["total_pages"], 1);
+
+    // 3. Listar com filtro de nome e paginação
+    let res_filtered = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/organizations?name=Empresa%20Teste%201&page=1&page_size=10")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res_filtered.status(), StatusCode::OK);
+    let body_filtered = to_bytes(res_filtered.into_body(), 1024 * 64).await.unwrap();
+    let json_filtered: Value = serde_json::from_slice(&body_filtered).unwrap();
+    let list_filtered = json_filtered["content"].as_array().unwrap();
+    assert_eq!(list_filtered.len(), 1);
+    assert_eq!(list_filtered[0]["name"], "Empresa Teste 1");
+    assert_eq!(json_filtered["total_elements"], 1);
+    assert_eq!(json_filtered["total_pages"], 1);
+}

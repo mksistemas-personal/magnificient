@@ -18,7 +18,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/health", get(health::health_check))
         .route(
             "/api/v1/organizations",
-            post(organizations_controller::create_organization),
+            post(organizations_controller::create_organization)
+                .get(organizations_controller::get_all_organizations),
         )
         .route(
             "/api/v1/organizations/{id}",
@@ -482,5 +483,112 @@ mod tests {
         let json_body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json_body["code"], "BAD_REQUEST");
         assert_eq!(json_body["status"], 400);
+    }
+
+    #[tokio::test]
+    async fn test_get_organization_by_id_success() {
+        let repo = InMemoryOrganizationRepository::new();
+        let org_id = OrganizationId::new(create_tsid());
+        let id_str = org_id.to_string();
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Acme Corp Para Consulta", doc)
+            .with_audit(AuditFields::created("admin"));
+        repo.save(&org).await.unwrap();
+
+        let app = create_router(create_test_state_with_repo(repo));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/api/v1/organizations/{id_str}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1024 * 64).await.unwrap();
+        let json_body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json_body["id"], id_str);
+        assert_eq!(json_body["name"], "Acme Corp Para Consulta");
+    }
+
+    #[tokio::test]
+    async fn test_get_all_organizations_without_params() {
+        let repo = InMemoryOrganizationRepository::new();
+        for i in 1..=3 {
+            let org_id = OrganizationId::new(create_tsid());
+            let doc = Document::new(format!("{:014}", i), DocumentType::Cnpj);
+            let org = Organization::new(org_id, format!("Org {}", i), doc)
+                .with_audit(AuditFields::created("admin"));
+            repo.save(&org).await.unwrap();
+        }
+
+        let app = create_router(create_test_state_with_repo(repo));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/organizations")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1024 * 64).await.unwrap();
+        let json_body: Value = serde_json::from_slice(&body).unwrap();
+        let arr = json_body["content"].as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(json_body["total_elements"], 3);
+        assert_eq!(json_body["total_pages"], 1);
+        assert_eq!(json_body["has_next"], false);
+        assert_eq!(json_body["has_previous"], false);
+    }
+
+    #[tokio::test]
+    async fn test_get_all_organizations_with_filter_and_pagination() {
+        let repo = InMemoryOrganizationRepository::new();
+        for i in 1..=5 {
+            let org_id = OrganizationId::new(create_tsid());
+            let name = if i <= 3 {
+                format!("Acme Branch {}", i)
+            } else {
+                format!("Beta Corp {}", i)
+            };
+            let doc = Document::new(format!("{:014}", i), DocumentType::Cnpj);
+            let org = Organization::new(org_id, name, doc).with_audit(AuditFields::created("admin"));
+            repo.save(&org).await.unwrap();
+        }
+
+        let app = create_router(create_test_state_with_repo(repo));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/organizations?name=Acme&page=1&page_size=2")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1024 * 64).await.unwrap();
+        let json_body: Value = serde_json::from_slice(&body).unwrap();
+        let arr = json_body["content"].as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(json_body["total_elements"], 3);
+        assert_eq!(json_body["total_pages"], 2);
+        assert_eq!(json_body["has_next"], true);
+        assert_eq!(json_body["has_previous"], false);
+        for item in arr {
+            assert!(item["name"].as_str().unwrap().contains("Acme"));
+        }
     }
 }

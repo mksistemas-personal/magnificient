@@ -39,6 +39,11 @@ pub trait AsyncGetByIdUseCase<Request, Response>: Send + Sync {
     async fn execute(&self, request: Request) -> Result<Response, BusinessError>;
 }
 
+#[async_trait]
+pub trait AsyncGetAllUseCase<Request, Response>: Send + Sync {
+    async fn execute(&self, request: Request) -> Result<Response, BusinessError>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -3,6 +3,7 @@ use crate::domain::organization_repository::OrganizationRepository;
 use crate::errors::OrganizationBusinessErrors;
 use async_trait::async_trait;
 use shared::entities::BusinessError;
+use shared::types::page::PageRequest;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tsid::TSID;
@@ -72,6 +73,52 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
         }
         Ok(())
     }
+
+    async fn find_all(
+        &self,
+        name: Option<&str>,
+        page_request: &PageRequest,
+    ) -> Result<Vec<Organization>, BusinessError> {
+        let map = self.items.read().unwrap();
+        let mut list: Vec<Organization> = map
+            .values()
+            .filter(|org| {
+                if let Some(filter) = name {
+                    let filter = filter.trim();
+                    if !filter.is_empty() {
+                        return org.name().to_lowercase().contains(&filter.to_lowercase());
+                    }
+                }
+                true
+            })
+            .cloned()
+            .collect();
+
+        list.sort_by(|a, b| a.id().cmp(&b.id()));
+
+        let offset = page_request.offset() as usize;
+        let limit = page_request.limit() as usize;
+
+        let result = list.into_iter().skip(offset).take(limit).collect();
+        Ok(result)
+    }
+
+    async fn count(&self, name: Option<&str>) -> Result<u64, BusinessError> {
+        let map = self.items.read().unwrap();
+        let total = map
+            .values()
+            .filter(|org| {
+                if let Some(filter) = name {
+                    let filter = filter.trim();
+                    if !filter.is_empty() {
+                        return org.name().to_lowercase().contains(&filter.to_lowercase());
+                    }
+                }
+                true
+            })
+            .count() as u64;
+        Ok(total)
+    }
 }
 
 #[cfg(test)]
@@ -130,5 +177,53 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), OrganizationBusinessErrors::not_found());
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_find_all_with_filter_and_pagination() {
+        let repo = InMemoryOrganizationRepository::new();
+        for i in 1..=10 {
+            let org_id = OrganizationId::new(TSID::from(i as u64));
+            let name = if i % 2 == 0 {
+                format!("Empresa Alfa {}", i)
+            } else {
+                format!("Empresa Beta {}", i)
+            };
+            let doc = Document::new(format!("{:014}", i), DocumentType::Cnpj);
+            let org = Organization::new(org_id, name, doc)
+                .with_audit(AuditFields::created("admin"));
+            repo.save(&org).await.unwrap();
+        }
+
+        // Test filter by name "Alfa"
+        let page_req = PageRequest::new(1, 10);
+        let result = OrganizationRepository::find_all(&repo, Some("Alfa"), &page_req).await.unwrap();
+        assert_eq!(result.len(), 5);
+        for org in &result {
+            assert!(org.name().contains("Alfa"));
+        }
+
+        // Test pagination: page 1, size 3
+        let page1 = PageRequest::new(1, 3);
+        let result_p1 = OrganizationRepository::find_all(&repo, None, &page1).await.unwrap();
+        assert_eq!(result_p1.len(), 3);
+
+        // Test pagination: page 2, size 3
+        let page2 = PageRequest::new(2, 3);
+        let result_p2 = OrganizationRepository::find_all(&repo, None, &page2).await.unwrap();
+        assert_eq!(result_p2.len(), 3);
+        assert_ne!(result_p1[0].id(), result_p2[0].id());
+
+        // Test pagination: page 4, size 3 (should have 1 item out of 10)
+        let page4 = PageRequest::new(4, 3);
+        let result_p4 = OrganizationRepository::find_all(&repo, None, &page4).await.unwrap();
+        assert_eq!(result_p4.len(), 1);
+
+        // Test count
+        let total_all = OrganizationRepository::count(&repo, None).await.unwrap();
+        assert_eq!(total_all, 10);
+
+        let total_alfa = OrganizationRepository::count(&repo, Some("Alfa")).await.unwrap();
+        assert_eq!(total_alfa, 5);
     }
 }

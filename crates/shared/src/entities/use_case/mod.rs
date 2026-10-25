@@ -6,6 +6,6 @@ pub mod use_case_traits;
 pub use async_result_ext::AsyncResultExt;
 pub use business_error::BusinessError;
 pub use use_case_traits::{
-    AddEntityUseCase, AsyncAddEntityUseCase, AsyncDeleteEntityUseCase, AsyncGetByIdUseCase,
-    AsyncUseCase, UseCase,
+    AddEntityUseCase, AsyncAddEntityUseCase, AsyncDeleteEntityUseCase, AsyncGetAllUseCase,
+    AsyncGetByIdUseCase, AsyncUseCase, UseCase,
 };

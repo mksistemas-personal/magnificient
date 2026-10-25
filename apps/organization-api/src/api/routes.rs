@@ -16,11 +16,15 @@ pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health_check))
         .route("/api/v1/health", get(health::health_check))
-        .route("/api/v1/organizations", post(organizations_controller::create_organization))
+        .route(
+            "/api/v1/organizations",
+            post(organizations_controller::create_organization),
+        )
         .route(
             "/api/v1/organizations/{id}",
             put(organizations_controller::update_organization)
-                .delete(organizations_controller::delete_organization),
+                .delete(organizations_controller::delete_organization)
+                .get(organizations_controller::getbyid_organization),
         )
         .layer(TraceLayer::new_for_http())
         .layer(cors)
@@ -30,7 +34,9 @@ pub fn create_router(state: AppState) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::organization_config::{DatabaseConfig, LoggingConfig, OrganizationAppConfig, ServerConfig};
+    use crate::config::organization_config::{
+        DatabaseConfig, LoggingConfig, OrganizationAppConfig, ServerConfig,
+    };
     use crate::domain::organization::{Organization, OrganizationId};
     use crate::domain::organization_repository::OrganizationRepository;
     use crate::infrastructure::in_memory_organization_repository::InMemoryOrganizationRepository;
@@ -62,7 +68,9 @@ mod tests {
                 level: "debug".to_string(),
             },
         };
-        let db = database::DatabaseConnection::connect_lazy_with_config(&config.database.to_connection_config());
+        let db = database::DatabaseConnection::connect_lazy_with_config(
+            &config.database.to_connection_config(),
+        );
         AppState::new_with_repository(Arc::new(config), db, repository)
     }
 
@@ -377,7 +385,9 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri(format!("/api/v1/organizations/{id_str}?update_by=admin_deleter"))
+                    .uri(format!(
+                        "/api/v1/organizations/{id_str}?update_by=admin_deleter"
+                    ))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -406,7 +416,9 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri(format!("/api/v1/organizations/{id_str}?updated_by=admin_deleter"))
+                    .uri(format!(
+                        "/api/v1/organizations/{id_str}?updated_by=admin_deleter"
+                    ))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -425,7 +437,9 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri(format!("/api/v1/organizations/{nonexistent_id}?update_by=admin"))
+                    .uri(format!(
+                        "/api/v1/organizations/{nonexistent_id}?update_by=admin"
+                    ))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -454,7 +468,9 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri(format!("/api/v1/organizations/{id_str}?update_by=%20%20%20"))
+                    .uri(format!(
+                        "/api/v1/organizations/{id_str}?update_by=%20%20%20"
+                    ))
                     .body(Body::empty())
                     .unwrap(),
             )

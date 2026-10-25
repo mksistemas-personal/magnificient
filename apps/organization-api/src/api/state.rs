@@ -2,15 +2,18 @@ use crate::application::addusecase::add_service::AddOrganizationService;
 use crate::application::addusecase::data::AddOrganizationRequest;
 use crate::application::updateusecase::UpdateOrganizationService;
 use crate::application::updateusecase::data::UpdateOrganizationRequest;
-use crate::application::{DeleteOrganizationRequest, DeleteOrganizationService};
+use crate::application::{
+    DeleteOrganizationRequest, DeleteOrganizationService, FindOrganizationByIdRequest,
+    GetOrganizationByIdRequest, GetOrganizationByIdService,
+};
 use crate::config::organization_config::OrganizationAppConfig;
 use crate::domain::organization::Organization;
 use crate::domain::organization_repository::OrganizationRepository;
 use crate::infrastructure::postgres_organization_repository::PostgresOrganizationRepository;
 use database::DatabaseConnection;
 use shared::entities::AsyncAddEntityUseCase;
-use shared::entities::use_case::AsyncDeleteEntityUseCase;
 use shared::entities::use_case::use_case_traits::AsyncUpdateEntityUseCase;
+use shared::entities::use_case::{AsyncDeleteEntityUseCase, AsyncGetByIdUseCase};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -23,6 +26,8 @@ pub struct AppState {
         Arc<dyn AsyncUpdateEntityUseCase<UpdateOrganizationRequest, Organization>>,
     pub delete_organization_use_case:
         Arc<dyn AsyncDeleteEntityUseCase<DeleteOrganizationRequest, ()>>,
+    pub get_by_id_organization_use_case:
+        Arc<dyn AsyncGetByIdUseCase<FindOrganizationByIdRequest, Organization>>,
 }
 
 impl AppState {
@@ -41,6 +46,10 @@ impl AppState {
                 uow.clone(),
             )),
             delete_organization_use_case: Arc::new(DeleteOrganizationService::new_with_uow(
+                repository.clone(),
+                uow.clone(),
+            )),
+            get_by_id_organization_use_case: Arc::new(GetOrganizationByIdService::new_with_uow(
                 repository, uow,
             )),
         }
@@ -58,7 +67,10 @@ impl AppState {
             update_organization_use_case: Arc::new(UpdateOrganizationService::new(
                 repository.clone(),
             )),
-            delete_organization_use_case: Arc::new(DeleteOrganizationService::new(repository)),
+            delete_organization_use_case: Arc::new(DeleteOrganizationService::new(
+                repository.clone(),
+            )),
+            get_by_id_organization_use_case: Arc::new(GetOrganizationByIdService::new(repository)),
         }
     }
 
@@ -68,6 +80,7 @@ impl AppState {
         add_use_case: Arc<dyn AsyncAddEntityUseCase<AddOrganizationRequest, Organization>>,
         update_use_case: Arc<dyn AsyncUpdateEntityUseCase<UpdateOrganizationRequest, Organization>>,
         delete_use_case: Arc<dyn AsyncDeleteEntityUseCase<DeleteOrganizationRequest, ()>>,
+        get_by_id_use_case: Arc<dyn AsyncGetByIdUseCase<GetOrganizationByIdRequest, Organization>>,
     ) -> Self {
         Self {
             config,
@@ -75,6 +88,7 @@ impl AppState {
             add_organization_use_case: add_use_case,
             update_organization_use_case: update_use_case,
             delete_organization_use_case: delete_use_case,
+            get_by_id_organization_use_case: get_by_id_use_case,
         }
     }
 

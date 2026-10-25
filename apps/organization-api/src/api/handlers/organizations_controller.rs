@@ -3,6 +3,7 @@ use crate::api::delete_organization_dtos::DeleteOrganizationParams;
 use crate::api::organization_shared_dtos::OrganizationResponseDto;
 use crate::api::state::AppState;
 use crate::api::update_organization_dtos::UpdateOrganizationDto;
+use crate::application::FindOrganizationByIdRequest;
 use crate::application::addusecase::data::AddOrganizationRequest;
 use crate::application::deleteusecase::data::DeleteOrganizationRequest;
 use crate::application::updateusecase::data::UpdateOrganizationRequest;
@@ -43,4 +44,18 @@ pub async fn delete_organization(
     let request: DeleteOrganizationRequest = params.into_request(organization_id);
     state.delete_organization_use_case.execute(request).await?;
     Ok(StatusCode::OK)
+}
+
+pub async fn getbyid_organization(
+    State(state): State<AppState>,
+    Path(id): Path<TSID>,
+) -> Result<impl IntoResponse, ApiError> {
+    let organization_id: OrganizationId = id.into();
+    let request: FindOrganizationByIdRequest = FindOrganizationByIdRequest { organization_id };
+    let organization = state
+        .get_by_id_organization_use_case
+        .execute(request)
+        .await?;
+    let response = OrganizationResponseDto::from(organization);
+    Ok((StatusCode::OK, Json(response)))
 }

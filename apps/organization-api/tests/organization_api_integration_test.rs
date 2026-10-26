@@ -1,7 +1,10 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
+use messaging::RabbitMqConfig;
 use organizacao_api::api::{AppState, create_router};
-use organizacao_api::config::organization_config::{DatabaseConfig, LoggingConfig, OrganizationAppConfig, ServerConfig};
+use organizacao_api::config::organization_config::{
+    DatabaseConfig, LoggingConfig, OrganizationAppConfig, ServerConfig,
+};
 use serde_json::{Value, json};
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -22,11 +25,23 @@ fn setup_test_app() -> axum::Router {
             min_connections: None,
             acquire_timeout_secs: None,
         },
+        rabbitmq: RabbitMqConfig {
+            rabbitmq_url: "amqp://rabbitmq:rabbitmq@localhost:5672/%2f".to_string(),
+            rabbitmq_prefetch_count: 10,
+            rabbitmq_reconnect_max_attempts: 0,
+            rabbitmq_reconnect_initial_ms: 1000,
+            rabbitmq_reconnect_max_ms: 30000,
+            rabbitmq_retry_max_attempts: 3,
+            rabbitmq_retry_initial_ms: 1000,
+            rabbitmq_retry_max_ms: 10000,
+        },
         logging: LoggingConfig {
             level: "debug".to_string(),
         },
     };
-    let db = database::DatabaseConnection::connect_lazy_with_config(&config.database.to_connection_config());
+    let db = database::DatabaseConnection::connect_lazy_with_config(
+        &config.database.to_connection_config(),
+    );
     let repository = organizacao_api::infrastructure::InMemoryOrganizationRepository::new();
     let state = AppState::new_with_repository(Arc::new(config), db, repository);
     create_router(state)
@@ -197,7 +212,11 @@ async fn test_create_and_get_all_organizations_flow() {
     let app = setup_test_app();
 
     // 1. Criar organizações
-    let cnpjs = ["00.000.000/0001-91", "11.222.333/0001-81", "12.345.678/0001-95"];
+    let cnpjs = [
+        "00.000.000/0001-91",
+        "11.222.333/0001-81",
+        "12.345.678/0001-95",
+    ];
     for (i, cnpj) in cnpjs.iter().enumerate() {
         let payload = json!({
             "name": format!("Empresa Teste {}", i + 1),

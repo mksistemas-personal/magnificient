@@ -1,0 +1,4 @@
+docker build \
+  -f deploy/docker/organizacao-api/Dockerfile \
+  -t organization-api:dev .
+

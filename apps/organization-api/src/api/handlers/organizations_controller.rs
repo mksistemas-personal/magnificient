@@ -68,7 +68,7 @@ pub async fn delete_organization(
             .publish_json(ORGANIZATION_EXCHANGE_NAME, ROUTING_KEY, &event)
             .await?;
     }
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn getbyid_organization(

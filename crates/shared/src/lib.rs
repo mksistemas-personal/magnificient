@@ -1,7 +1,7 @@
 pub mod database;
 pub mod entities;
-pub mod types;
 pub mod errors;
+pub mod types;
 
-pub use database::{row_get_field, RowExt};
 
+pub use database::{RowExt, row_get_field};

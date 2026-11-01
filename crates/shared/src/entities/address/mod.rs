@@ -1,0 +1,9 @@
+#[allow(clippy::module_inception)]
+pub mod address;
+pub mod validator;
+
+pub use address::Address;
+pub use validator::{
+    validator_for_country, AddressValidator, ArgentinaAddressValidator, BrazilAddressValidator,
+    GenericAddressValidator, UnitedStatesAddressValidator,
+};

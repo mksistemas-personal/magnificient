@@ -1,7 +1,7 @@
 use crate::domain::Organization;
 use crate::errors::OrganizationBusinessErrors;
 use serde::{Deserialize, Serialize};
-use shared::entities::DocumentType;
+use shared::entities::{Address, DocumentType};
 use shared::errors::api_error::ApiError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -9,6 +9,8 @@ pub struct OrganizationResponseDto {
     pub id: String,
     pub name: String,
     pub document: DocumentResponseDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<Address>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audit: Option<AuditResponseDto>,
 }
@@ -61,6 +63,7 @@ impl From<Organization> for OrganizationResponseDto {
                 document_type: org.document().document_type().code().to_string(),
                 country: org.document().country().map(|c| c.code().to_string()),
             },
+            address: org.address().cloned(),
             audit: org.audit.as_ref().map(|a| AuditResponseDto {
                 created_by: a.created_by().to_string(),
                 created_at: a.created_at().to_rfc3339(),

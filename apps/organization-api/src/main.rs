@@ -7,13 +7,14 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
 
-const DEFAULT_LOG_FILTER: &str = "info,organizacao_api=debug,tower_http=debug,database=debug";
+//const DEFAULT_LOG_FILTER: &str = "info,organizacao_api=debug,tower_http=debug,database=debug";
+const DEBUG_LOG_FILTER: &str = "debug,organizacao_api=debug,tower_http=debug,database=debug";
 
 fn init_tracing() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| DEFAULT_LOG_FILTER.into()),
+                .unwrap_or_else(|_| DEBUG_LOG_FILTER.into()),
         )
         .init();
 }
@@ -34,8 +35,7 @@ async fn setup_messaging(
 ) -> Result<Arc<RabbitMqPublisher>, Box<dyn std::error::Error>> {
     info!("Initializing RabbitMQ publisher...");
     let rabbitmq_client = create_rabbitmq_client(&config.rabbitmq).await?;
-    let rabbitmq_seed = RabbitmqSeed::new(&rabbitmq_client);
-    rabbitmq_seed.create().await?;
+    RabbitmqSeed::new(&rabbitmq_client).create().await?;
     Ok(Arc::new(RabbitMqPublisher::new(rabbitmq_client)))
 }
 

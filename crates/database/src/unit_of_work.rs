@@ -74,6 +74,24 @@ impl UnitOfWork {
             }
         }
     }
+
+    /// Executa uma operação assíncrona gerenciando a transação de forma opcional.
+    ///
+    /// Se `uow` for `Some(&UnitOfWork)`, a operação é executada dentro de uma transação via `run_tx`.
+    /// Se `uow` for `None`, a operação é executada diretamente fora de uma transação.
+    pub async fn execute_maybe_tx<F, Fut, T>(
+        uow: Option<&UnitOfWork>,
+        operation: F,
+    ) -> Result<T, BusinessError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T, BusinessError>>,
+    {
+        match uow {
+            Some(u) => u.run_tx(|_tx| operation()).await,
+            None => operation().await,
+        }
+    }
 }
 
 impl From<PgPool> for UnitOfWork {
@@ -112,5 +130,13 @@ mod tests {
 
         let uow_from_pool: UnitOfWork = db.pool().clone().into();
         assert!(!uow_from_pool.pool().is_closed());
+    }
+
+    #[tokio::test]
+    async fn test_unit_of_work_execute_maybe_tx_none() {
+        let result: Result<&str, BusinessError> =
+            UnitOfWork::execute_maybe_tx(None, || async { Ok("success_without_uow") }).await;
+
+        assert_eq!(result.unwrap(), "success_without_uow");
     }
 }

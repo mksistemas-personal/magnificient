@@ -1,6 +1,6 @@
-use crate::application::OrganizationBusinessErrors;
 use crate::application::deleteusecase::data::*;
 use crate::application::deleteusecase::states::*;
+use crate::application::deleteusecase::steps::{DeleteOrganizationContext, ValidateInitialContext};
 use crate::domain::OrganizationRepository;
 use async_trait::async_trait;
 use database::UnitOfWork;
@@ -8,37 +8,6 @@ use shared::entities::BusinessError;
 use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncDeleteEntityUseCase;
 use std::sync::Arc;
-
-trait ValidateInitialContext {
-    fn validate(self) -> Result<Context<Validated, ValidatedContextData>, BusinessError>;
-}
-
-impl ValidateInitialContext for Context<Initial, InitialContextData> {
-    fn validate(self) -> Result<Context<Validated, ValidatedContextData>, BusinessError> {
-        let request = self.data.request;
-
-        if !request.organization_id.is_valid() {
-            return Err(OrganizationBusinessErrors::id_invalid());
-        }
-        if request.updated_by.trim().is_empty() {
-            return Err(OrganizationBusinessErrors::updater_required());
-        }
-
-        Ok(Context::new(ValidatedContextData { request }))
-    }
-}
-
-trait DeleteOrganizationContext {
-    async fn delete(self, repository: &dyn OrganizationRepository) -> Result<(), BusinessError>;
-}
-
-impl DeleteOrganizationContext for Context<Validated, ValidatedContextData> {
-    async fn delete(self, repository: &dyn OrganizationRepository) -> Result<(), BusinessError> {
-        let org_id = self.data.request.organization_id;
-        let updated_by = self.data.request.updated_by;
-        repository.delete(*org_id, &updated_by).await
-    }
-}
 
 #[derive(Clone)]
 pub struct DeleteOrganizationService {
@@ -64,54 +33,19 @@ impl DeleteOrganizationService {
         }
     }
 
-    pub fn new_with_arc(repository: Arc<dyn OrganizationRepository>) -> Self {
-        Self {
-            repository,
-            uow: None,
-        }
-    }
-
-    pub fn new_with_arc_and_uow(
-        repository: Arc<dyn OrganizationRepository>,
-        uow: UnitOfWork,
-    ) -> Self {
-        Self {
-            repository,
-            uow: Some(uow),
-        }
-    }
-
-    pub fn with_uow(mut self, uow: UnitOfWork) -> Self {
-        self.uow = Some(uow);
-        self
-    }
-
     pub async fn execute(&self, request: DeleteOrganizationRequest) -> Result<(), BusinessError> {
         <Self as AsyncDeleteEntityUseCase<DeleteOrganizationRequest, ()>>::execute(self, request)
             .await
-    }
-
-    async fn execute_transactional_pipeline(
-        validated: Context<Validated, ValidatedContextData>,
-        repo: &dyn OrganizationRepository,
-    ) -> Result<(), BusinessError> {
-        validated.delete(repo).await
     }
 }
 
 #[async_trait]
 impl AsyncDeleteEntityUseCase<DeleteOrganizationRequest, ()> for DeleteOrganizationService {
     async fn execute(&self, request: DeleteOrganizationRequest) -> Result<(), BusinessError> {
-        let validated = Context::<Initial, _>::new(InitialContextData { request }).validate()?;
-
-        if let Some(uow) = &self.uow {
-            uow.run_tx(|_tx| {
-                Self::execute_transactional_pipeline(validated, self.repository.as_ref())
-            })
+        Context::<Initial, _>::new(InitialContextData { request })
+            .validate()?
+            .delete(self.repository.as_ref(), self.uow.as_ref())
             .await
-        } else {
-            Self::execute_transactional_pipeline(validated, self.repository.as_ref()).await
-        }
     }
 }
 
@@ -119,6 +53,7 @@ impl AsyncDeleteEntityUseCase<DeleteOrganizationRequest, ()> for DeleteOrganizat
 mod tests {
     use super::*;
     use crate::domain::{Organization, OrganizationId};
+    use crate::errors::OrganizationBusinessErrors;
     use crate::infrastructure::InMemoryOrganizationRepository;
     use shared::entities::{AuditFields, Document, DocumentType, TSID};
 

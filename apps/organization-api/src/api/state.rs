@@ -11,15 +11,15 @@ use crate::application::{
 use crate::config::organization_config::OrganizationAppConfig;
 use crate::domain::organization::Organization;
 use crate::domain::organization_repository::OrganizationRepository;
-use crate::infrastructure::postgres_organization_repository::PostgresOrganizationRepository;
 use crate::infrastructure::PostgresAddressRepository;
+use crate::infrastructure::postgres_organization_repository::PostgresOrganizationRepository;
 use database::DatabaseConnection;
 use messaging::RabbitMqPublisher;
-use shared::entities::{AddressRepository, AsyncAddEntityUseCase};
 use shared::entities::use_case::use_case_traits::AsyncUpdateEntityUseCase;
 use shared::entities::use_case::{
     AsyncDeleteEntityUseCase, AsyncGetAllUseCase, AsyncGetByIdUseCase,
 };
+use shared::entities::{AddressRepository, AsyncAddEntityUseCase};
 use shared::types::page::Page;
 use std::sync::Arc;
 
@@ -43,7 +43,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: Arc<OrganizationAppConfig>, db: DatabaseConnection) -> Self {
-        let repository = PostgresOrganizationRepository::from_connection(&db);
+        let repository = PostgresOrganizationRepository::new(db.pool().clone());
         let address_repository = PostgresAddressRepository::new(db.pool().clone());
         let uow = db.unit_of_work();
         Self {
@@ -51,11 +51,13 @@ impl AppState {
             db,
             message_publisher: None,
             address_repository: Some(Arc::new(address_repository.clone())),
-            add_organization_use_case: Arc::new(AddOrganizationService::new_with_repositories_and_uow(
-                repository.clone(),
-                address_repository,
-                uow.clone(),
-            )),
+            add_organization_use_case: Arc::new(
+                AddOrganizationService::new_with_repositories_and_uow(
+                    repository.clone(),
+                    address_repository,
+                    uow.clone(),
+                ),
+            ),
             update_organization_use_case: Arc::new(UpdateOrganizationService::new_with_uow(
                 repository.clone(),
                 uow.clone(),
@@ -188,8 +190,8 @@ mod tests {
     use crate::config::organization_config::{
         DatabaseConfig, LoggingConfig, OrganizationAppConfig, ServerConfig,
     };
-    use crate::infrastructure::in_memory_organization_repository::InMemoryOrganizationRepository;
     use crate::infrastructure::InMemoryAddressRepository;
+    use crate::infrastructure::in_memory_organization_repository::InMemoryOrganizationRepository;
     use messaging::RabbitMqConfig;
 
     fn create_test_config() -> Arc<OrganizationAppConfig> {
@@ -227,7 +229,8 @@ mod tests {
     #[tokio::test]
     async fn test_app_state_initialization() {
         let config = create_test_config();
-        let db = DatabaseConnection::connect_lazy_with_config(&config.database.to_connection_config());
+        let db =
+            DatabaseConnection::connect_lazy_with_config(&config.database.to_connection_config());
         let repo = InMemoryOrganizationRepository::new();
         let state = AppState::new_with_repository(Arc::clone(&config), db, repo);
 
@@ -238,7 +241,8 @@ mod tests {
     #[tokio::test]
     async fn test_app_state_with_repositories() {
         let config = create_test_config();
-        let db = DatabaseConnection::connect_lazy_with_config(&config.database.to_connection_config());
+        let db =
+            DatabaseConnection::connect_lazy_with_config(&config.database.to_connection_config());
         let repo = InMemoryOrganizationRepository::new();
         let addr_repo = InMemoryAddressRepository::new();
         let state = AppState::new_with_repositories(Arc::clone(&config), db, repo, addr_repo);

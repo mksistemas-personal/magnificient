@@ -3,6 +3,7 @@ name = "shared"
 version.workspace = true
 edition.workspace = true
 
+
 [dependencies]
 chrono = { version = "0.4.45", features = ["serde"] }
 tsid = { version = "0.3.4", features = ["serde"] }
@@ -12,3 +13,4 @@ axum = "0.8"
 tokio = { version = "1.43", features = ["full"] }
 tracing = "0.1"
 sqlx = { version = "0.9.0", features = ["runtime-tokio", "postgres", "macros", "chrono"] }
+

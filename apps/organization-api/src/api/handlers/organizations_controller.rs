@@ -13,12 +13,16 @@ use crate::domain::OrganizationId;
 use crate::domain::message_events::OrganizationEvent;
 use axum::extract::{Path, Query, State};
 use axum::{Json, http::StatusCode, response::IntoResponse};
-use messaging::MessagePublisher;
+use messaging::{MessageHeaders, MessagePublisher};
 use shared::errors::api_error::ApiError;
 use tsid::TSID;
 
 const ORGANIZATION_EXCHANGE_NAME: &str = "organization.output";
 const ROUTING_KEY: &str = "*";
+
+const EVENT_TYPE: &str = "OrganizationEvent";
+const EVENT_SOURCE: &str = "organization-api";
+const EVENT_VERSION: i32 = 100;
 
 pub async fn create_organization(
     State(state): State<AppState>,
@@ -30,7 +34,16 @@ pub async fn create_organization(
     let event = OrganizationEvent::add(organization.clone());
     if let Some(publisher) = state.message_publisher.as_ref() {
         publisher
-            .publish_json(ORGANIZATION_EXCHANGE_NAME, ROUTING_KEY, &event)
+            .publish_json(
+                ORGANIZATION_EXCHANGE_NAME,
+                ROUTING_KEY,
+                &event,
+                Some(MessageHeaders::create_default(
+                    EVENT_TYPE,
+                    EVENT_SOURCE,
+                    EVENT_VERSION,
+                )),
+            )
             .await?;
     }
     Ok((StatusCode::CREATED, Json(response)))
@@ -48,7 +61,7 @@ pub async fn update_organization(
     let event = OrganizationEvent::update(organization.clone());
     if let Some(publisher) = state.message_publisher.as_ref() {
         publisher
-            .publish_json(ORGANIZATION_EXCHANGE_NAME, ROUTING_KEY, &event)
+            .publish_json(ORGANIZATION_EXCHANGE_NAME, ROUTING_KEY, &event, None)
             .await?;
     }
     Ok((StatusCode::OK, Json(response)))
@@ -65,7 +78,7 @@ pub async fn delete_organization(
     let event = OrganizationEvent::delete(organization_id);
     if let Some(publisher) = state.message_publisher.as_ref() {
         publisher
-            .publish_json(ORGANIZATION_EXCHANGE_NAME, ROUTING_KEY, &event)
+            .publish_json(ORGANIZATION_EXCHANGE_NAME, ROUTING_KEY, &event, None)
             .await?;
     }
     Ok(StatusCode::NO_CONTENT)

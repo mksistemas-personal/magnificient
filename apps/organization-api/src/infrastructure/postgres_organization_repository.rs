@@ -3,7 +3,7 @@ use crate::domain::organization_repository::OrganizationRepository;
 use crate::errors::OrganizationBusinessErrors;
 use async_trait::async_trait;
 use database::DatabaseConnection;
-use shared::entities::{AuditFields, BusinessError, Country, Document, DocumentType, TSID};
+use shared::entities::{Address, AuditFields, BusinessError, Country, Document, DocumentType, TSID};
 use shared::row_get_field;
 use shared::types::page::PageRequest;
 use sqlx::PgPool;
@@ -101,18 +101,23 @@ impl PostgresOrganizationRepository {
             .document()
             .country()
             .map(|country| country.code().to_string());
+        let address_id = organization
+            .address()
+            .and_then(|addr| addr.id())
+            .map(|id| id.number() as i64);
 
         let query = r#"
             INSERT INTO organizations (
                 id, name, document_value, document_type, document_country,
-                deleted, created_at, updated_at, created_by, updated_by
+                address_id, deleted, created_at, updated_at, created_by, updated_by
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 document_value = EXCLUDED.document_value,
                 document_type = EXCLUDED.document_type,
                 document_country = EXCLUDED.document_country,
+                address_id = EXCLUDED.address_id,
                 deleted = EXCLUDED.deleted,
                 updated_at = EXCLUDED.updated_at,
                 updated_by = EXCLUDED.updated_by
@@ -124,6 +129,7 @@ impl PostgresOrganizationRepository {
             .bind(organization.document().value())
             .bind(organization.document().document_type().code())
             .bind(doc_country)
+            .bind(address_id)
             .bind(false)
             .bind(created_at)
             .bind(updated_at)
@@ -152,10 +158,16 @@ impl PostgresOrganizationRepository {
     {
         let id_raw = id.number() as i64;
         let query = r#"
-            SELECT id, name, document_value, document_type, document_country,
-                   created_at, updated_at, created_by, updated_by
-            FROM organizations
-            WHERE id = $1 AND deleted = FALSE
+            SELECT o.id, o.name, o.document_value, o.document_type, o.document_country,
+                   o.created_at, o.updated_at, o.created_by, o.updated_by,
+                   a.id AS addr_id, a.street, a.number, a.complement, a.neighborhood,
+                   a.city, a.state, a.state_code, a.postal_code, a.country AS addr_country,
+                   a.country_code AS addr_country_code, a.reference,
+                   a.created_at AS addr_created_at, a.updated_at AS addr_updated_at,
+                   a.created_by AS addr_created_by, a.updated_by AS addr_updated_by
+            FROM organizations o
+            LEFT JOIN addresses a ON o.address_id = a.id AND a.deleted = FALSE
+            WHERE o.id = $1 AND o.deleted = FALSE
         "#;
 
         let row_opt = sqlx::query(query)
@@ -172,34 +184,7 @@ impl PostgresOrganizationRepository {
             None => return Err(OrganizationBusinessErrors::not_found()),
         };
 
-        let id_raw: i64 = row_get_field(&row, "id")?;
-        let name: String = row_get_field(&row, "name")?;
-        let doc_value: String = row_get_field(&row, "document_value")?;
-        let doc_type_str: String = row_get_field(&row, "document_type")?;
-        let doc_country: Option<String> = row_get_field(&row, "document_country")?;
-        let created_at: chrono::DateTime<chrono::Utc> = row_get_field(&row, "created_at")?;
-        let updated_at: chrono::DateTime<chrono::Utc> = row_get_field(&row, "updated_at")?;
-        let created_by: String = row_get_field(&row, "created_by")?;
-        let updated_by: String = row_get_field(&row, "updated_by")?;
-
-        let country = doc_country.as_deref().map(Country::from_code);
-        let document_type = DocumentType::from_code(&doc_type_str, country);
-        let document = Document::new(doc_value, document_type);
-        let audit = AuditFields {
-            created_at,
-            updated_at,
-            created_by,
-            updated_by,
-        };
-
-        let organization = Organization::new(
-            OrganizationId::new(TSID::from(id_raw as u64)),
-            name,
-            document,
-        )
-        .with_audit(audit);
-
-        Ok(organization)
+        Self::map_row_to_organization(&row)
     }
 
     /// Executa o comando de exclusão lógica (soft delete) no PostgreSQL utilizando qualquer executor SQLx compatível.
@@ -253,11 +238,17 @@ impl PostgresOrganizationRepository {
         let rows = if let Some(filter) = name_filter {
             let pattern = format!("%{filter}%");
             let query = r#"
-                SELECT id, name, document_value, document_type, document_country,
-                       created_at, updated_at, created_by, updated_by
-                FROM organizations
-                WHERE deleted = FALSE AND name ILIKE $1
-                ORDER BY name, id
+                SELECT o.id, o.name, o.document_value, o.document_type, o.document_country,
+                       o.created_at, o.updated_at, o.created_by, o.updated_by,
+                       a.id AS addr_id, a.street, a.number, a.complement, a.neighborhood,
+                       a.city, a.state, a.state_code, a.postal_code, a.country AS addr_country,
+                       a.country_code AS addr_country_code, a.reference,
+                       a.created_at AS addr_created_at, a.updated_at AS addr_updated_at,
+                       a.created_by AS addr_created_by, a.updated_by AS addr_updated_by
+                FROM organizations o
+                LEFT JOIN addresses a ON o.address_id = a.id AND a.deleted = FALSE
+                WHERE o.deleted = FALSE AND o.name ILIKE $1
+                ORDER BY o.name, o.id
                 LIMIT $2 OFFSET $3
             "#;
             sqlx::query(query)
@@ -268,11 +259,17 @@ impl PostgresOrganizationRepository {
                 .await
         } else {
             let query = r#"
-                SELECT id, name, document_value, document_type, document_country,
-                       created_at, updated_at, created_by, updated_by
-                FROM organizations
-                WHERE deleted = FALSE
-                ORDER BY name, id
+                SELECT o.id, o.name, o.document_value, o.document_type, o.document_country,
+                       o.created_at, o.updated_at, o.created_by, o.updated_by,
+                       a.id AS addr_id, a.street, a.number, a.complement, a.neighborhood,
+                       a.city, a.state, a.state_code, a.postal_code, a.country AS addr_country,
+                       a.country_code AS addr_country_code, a.reference,
+                       a.created_at AS addr_created_at, a.updated_at AS addr_updated_at,
+                       a.created_by AS addr_created_by, a.updated_by AS addr_updated_by
+                FROM organizations o
+                LEFT JOIN addresses a ON o.address_id = a.id AND a.deleted = FALSE
+                WHERE o.deleted = FALSE
+                ORDER BY o.name, o.id
                 LIMIT $1 OFFSET $2
             "#;
             sqlx::query(query)
@@ -288,38 +285,95 @@ impl PostgresOrganizationRepository {
         })?;
 
         let mut organizations = Vec::with_capacity(rows.len());
-        for row in rows {
-            let id_raw: i64 = row_get_field(&row, "id")?;
-            let name: String = row_get_field(&row, "name")?;
-            let doc_value: String = row_get_field(&row, "document_value")?;
-            let doc_type_str: String = row_get_field(&row, "document_type")?;
-            let doc_country: Option<String> = row_get_field(&row, "document_country")?;
-            let created_at: chrono::DateTime<chrono::Utc> = row_get_field(&row, "created_at")?;
-            let updated_at: chrono::DateTime<chrono::Utc> = row_get_field(&row, "updated_at")?;
-            let created_by: String = row_get_field(&row, "created_by")?;
-            let updated_by: String = row_get_field(&row, "updated_by")?;
-
-            let country = doc_country.as_deref().map(Country::from_code);
-            let document_type = DocumentType::from_code(&doc_type_str, country);
-            let document = Document::new(doc_value, document_type);
-            let audit = AuditFields {
-                created_at,
-                updated_at,
-                created_by,
-                updated_by,
-            };
-
-            let organization = Organization::new(
-                OrganizationId::new(TSID::from(id_raw as u64)),
-                name,
-                document,
-            )
-            .with_audit(audit);
-
-            organizations.push(organization);
+        for row in &rows {
+            organizations.push(Self::map_row_to_organization(row)?);
         }
 
         Ok(organizations)
+    }
+
+    fn map_row_to_organization(row: &sqlx::postgres::PgRow) -> Result<Organization, BusinessError> {
+        let id_raw: i64 = row_get_field(row, "id")?;
+        let name: String = row_get_field(row, "name")?;
+        let doc_value: String = row_get_field(row, "document_value")?;
+        let doc_type_str: String = row_get_field(row, "document_type")?;
+        let doc_country: Option<String> = row_get_field(row, "document_country")?;
+        let created_at: chrono::DateTime<chrono::Utc> = row_get_field(row, "created_at")?;
+        let updated_at: chrono::DateTime<chrono::Utc> = row_get_field(row, "updated_at")?;
+        let created_by: String = row_get_field(row, "created_by")?;
+        let updated_by: String = row_get_field(row, "updated_by")?;
+
+        let country = doc_country.as_deref().map(Country::from_code);
+        let document_type = DocumentType::from_code(&doc_type_str, country);
+        let document = Document::new(doc_value, document_type);
+        let audit = AuditFields {
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+        };
+
+        let mut organization = Organization::new(
+            OrganizationId::new(TSID::from(id_raw as u64)),
+            name,
+            document,
+        )
+        .with_audit(audit);
+
+        let addr_id: Option<i64> = row_get_field(row, "addr_id").ok().flatten();
+        if let Some(addr_id_val) = addr_id {
+            let street: String = row_get_field(row, "street").unwrap_or_default();
+            let number: String = row_get_field(row, "number").unwrap_or_default();
+            let complement: Option<String> = row_get_field(row, "complement").ok().flatten();
+            let neighborhood: Option<String> = row_get_field(row, "neighborhood").ok().flatten();
+            let city: String = row_get_field(row, "city").unwrap_or_default();
+            let state: Option<String> = row_get_field(row, "state").ok().flatten();
+            let state_code: Option<String> = row_get_field(row, "state_code").ok().flatten();
+            let postal_code: String = row_get_field(row, "postal_code").unwrap_or_default();
+            let addr_country: Option<String> = row_get_field(row, "addr_country").ok().flatten();
+            let addr_country_code: Option<String> =
+                row_get_field(row, "addr_country_code").ok().flatten();
+            let reference: Option<String> = row_get_field(row, "reference").ok().flatten();
+            let addr_created_at: Option<chrono::DateTime<chrono::Utc>> =
+                row_get_field(row, "addr_created_at").ok().flatten();
+            let addr_updated_at: Option<chrono::DateTime<chrono::Utc>> =
+                row_get_field(row, "addr_updated_at").ok().flatten();
+            let addr_created_by: Option<String> =
+                row_get_field(row, "addr_created_by").ok().flatten();
+            let addr_updated_by: Option<String> =
+                row_get_field(row, "addr_updated_by").ok().flatten();
+
+            let mut address = Address::new(
+                street,
+                number,
+                complement.unwrap_or_default(),
+                neighborhood.unwrap_or_default(),
+                city,
+                state.unwrap_or_default(),
+                state_code.unwrap_or_default(),
+                postal_code,
+                addr_country.unwrap_or_default(),
+                addr_country_code.unwrap_or_default(),
+                reference.unwrap_or_default(),
+            );
+            address.set_id(TSID::from(addr_id_val as u64));
+            if let (Some(c_at), Some(u_at), Some(c_by), Some(u_by)) = (
+                addr_created_at,
+                addr_updated_at,
+                addr_created_by,
+                addr_updated_by,
+            ) {
+                address.set_audit(Some(AuditFields {
+                    created_at: c_at,
+                    updated_at: u_at,
+                    created_by: c_by,
+                    updated_by: u_by,
+                }));
+            }
+            organization = organization.with_address(address);
+        }
+
+        Ok(organization)
     }
 
     /// Executa a contagem de organizações que atendem ao filtro opcional por nome no PostgreSQL.

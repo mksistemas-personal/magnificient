@@ -2622,6 +2622,7 @@ dependencies = [
  "serde",
  "sqlx",
  "tokio",
+ "tracing",
  "tsid",
 ]
 

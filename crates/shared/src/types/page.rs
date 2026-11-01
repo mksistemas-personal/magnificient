@@ -16,7 +16,7 @@ impl<T> Page<T> {
         let total_pages = if page_size == 0 {
             0
         } else {
-            ((total_elements + page_size as u64 - 1) / page_size as u64) as u32
+            total_elements.div_ceil(page_size as u64) as u32
         };
         let has_next = page < total_pages;
         let has_previous = page > 1 && total_pages > 0;

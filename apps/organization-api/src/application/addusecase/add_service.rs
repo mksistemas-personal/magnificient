@@ -8,7 +8,7 @@ use crate::domain::{Organization, OrganizationId, OrganizationRepository};
 use async_trait::async_trait;
 use database::UnitOfWork;
 use shared::entities::use_case::context::Context;
-use shared::entities::{AsyncAddEntityUseCase, AuditFields, BusinessError, Document};
+use shared::entities::{AddressRepository, AsyncAddEntityUseCase, AuditFields, BusinessError, Document};
 use std::sync::Arc;
 use tsid::create_tsid;
 
@@ -113,6 +113,7 @@ trait PersistOrganizationContext {
     async fn save(
         self,
         repository: &dyn OrganizationRepository,
+        address_repository: Option<&dyn AddressRepository>,
     ) -> Result<Organization, BusinessError>;
 }
 
@@ -120,14 +121,23 @@ impl PersistOrganizationContext for Context<Built, CreatedContextData> {
     async fn save(
         self,
         repository: &dyn OrganizationRepository,
+        address_repository: Option<&dyn AddressRepository>,
     ) -> Result<Organization, BusinessError> {
-        repository.save(&self.data.organization).await
+        let mut organization = self.data.organization;
+        if let (Some(address_repo), Some(address)) =
+            (address_repository, organization.address().cloned())
+        {
+            let saved_address = address_repo.save(&address).await?;
+            organization = organization.with_address(saved_address);
+        }
+        repository.save(&organization).await
     }
 }
 
 #[derive(Clone)]
 pub struct AddOrganizationService {
     repository: Arc<dyn OrganizationRepository>,
+    address_repository: Option<Arc<dyn AddressRepository>>,
     uow: Option<UnitOfWork>,
 }
 
@@ -135,6 +145,7 @@ impl AddOrganizationService {
     pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
         Self {
             repository: Arc::new(repository),
+            address_repository: None,
             uow: None,
         }
     }
@@ -145,6 +156,30 @@ impl AddOrganizationService {
     ) -> Self {
         Self {
             repository: Arc::new(repository),
+            address_repository: None,
+            uow: Some(uow),
+        }
+    }
+
+    pub fn new_with_repositories(
+        repository: impl OrganizationRepository + 'static,
+        address_repository: impl AddressRepository + 'static,
+    ) -> Self {
+        Self {
+            repository: Arc::new(repository),
+            address_repository: Some(Arc::new(address_repository)),
+            uow: None,
+        }
+    }
+
+    pub fn new_with_repositories_and_uow(
+        repository: impl OrganizationRepository + 'static,
+        address_repository: impl AddressRepository + 'static,
+        uow: UnitOfWork,
+    ) -> Self {
+        Self {
+            repository: Arc::new(repository),
+            address_repository: Some(Arc::new(address_repository)),
             uow: Some(uow),
         }
     }
@@ -152,7 +187,31 @@ impl AddOrganizationService {
     pub fn new_with_arc(repository: Arc<dyn OrganizationRepository>) -> Self {
         Self {
             repository,
+            address_repository: None,
             uow: None,
+        }
+    }
+
+    pub fn new_with_arcs(
+        repository: Arc<dyn OrganizationRepository>,
+        address_repository: Option<Arc<dyn AddressRepository>>,
+    ) -> Self {
+        Self {
+            repository,
+            address_repository,
+            uow: None,
+        }
+    }
+
+    pub fn new_with_arcs_and_uow(
+        repository: Arc<dyn OrganizationRepository>,
+        address_repository: Option<Arc<dyn AddressRepository>>,
+        uow: UnitOfWork,
+    ) -> Self {
+        Self {
+            repository,
+            address_repository,
+            uow: Some(uow),
         }
     }
 
@@ -162,8 +221,25 @@ impl AddOrganizationService {
     ) -> Self {
         Self {
             repository,
+            address_repository: None,
             uow: Some(uow),
         }
+    }
+
+    pub fn with_address_repository(
+        mut self,
+        address_repository: impl AddressRepository + 'static,
+    ) -> Self {
+        self.address_repository = Some(Arc::new(address_repository));
+        self
+    }
+
+    pub fn with_address_repository_arc(
+        mut self,
+        address_repository: Arc<dyn AddressRepository>,
+    ) -> Self {
+        self.address_repository = Some(address_repository);
+        self
     }
 
     pub async fn execute(
@@ -179,12 +255,13 @@ impl AddOrganizationService {
     async fn execute_transactional_pipeline(
         initial: Context<Initial, InitialContextData>,
         repo: &dyn OrganizationRepository,
+        address_repo: Option<&dyn AddressRepository>,
     ) -> Result<Organization, BusinessError> {
         initial
             .validate()?
             .validate_address()?
             .build()?
-            .save(repo)
+            .save(repo, address_repo)
             .await
     }
 }
@@ -196,14 +273,24 @@ impl AsyncAddEntityUseCase<AddOrganizationRequest, Organization> for AddOrganiza
         request: AddOrganizationRequest,
     ) -> Result<Organization, BusinessError> {
         let initial = Context::<Initial, _>::new(InitialContextData { request });
+        let address_repo = self.address_repository.as_deref();
 
         if let Some(uow) = &self.uow {
             uow.run_tx(|_tx| {
-                Self::execute_transactional_pipeline(initial, self.repository.as_ref())
+                Self::execute_transactional_pipeline(
+                    initial,
+                    self.repository.as_ref(),
+                    address_repo,
+                )
             })
             .await
         } else {
-            Self::execute_transactional_pipeline(initial, self.repository.as_ref()).await
+            Self::execute_transactional_pipeline(
+                initial,
+                self.repository.as_ref(),
+                address_repo,
+            )
+            .await
         }
     }
 }
@@ -488,5 +575,53 @@ mod tests {
 
         let result = service.execute(request).await;
         assert_eq!(result, Err(OrganizationBusinessErrors::creator_required()));
+    }
+
+    #[tokio::test]
+    async fn test_add_organization_persists_address_in_address_repository() {
+        use shared::entities::InMemoryAddressRepository;
+
+        let org_repo = InMemoryOrganizationRepository::new();
+        let addr_repo = InMemoryAddressRepository::new();
+        let service = AddOrganizationService::new_with_repositories(org_repo.clone(), addr_repo.clone());
+
+        let address = Address::new(
+            "Av. Paulista",
+            "1000",
+            "Conjunto 101",
+            "Bela Vista",
+            "São Paulo",
+            "São Paulo",
+            "SP",
+            "01310-100",
+            "Brasil",
+            "BR",
+            "Próximo ao metrô",
+        );
+
+        let request = AddOrganizationRequest::new(
+            "Empresa Teste Com Repositorio",
+            "00.000.000/0001-91",
+            DocumentType::Cnpj,
+            "admin",
+        )
+        .with_address(address.clone());
+
+        let result = service.execute(request).await;
+        assert!(result.is_ok());
+
+        let org = result.unwrap();
+        assert_eq!(org.name(), "Empresa Teste Com Repositorio");
+        assert!(org.address().is_some());
+        let saved_addr = org.address().unwrap();
+        assert!(saved_addr.id().is_some());
+
+        let addr_id = saved_addr.id().unwrap();
+        let found_addr = addr_repo.find_by_id(addr_id).await;
+        assert!(found_addr.is_ok());
+        let found_addr = found_addr.unwrap();
+        assert_eq!(found_addr.street, "Av. Paulista");
+        assert_eq!(found_addr.city, "São Paulo");
+        assert_eq!(found_addr.id(), Some(addr_id));
     }
 }

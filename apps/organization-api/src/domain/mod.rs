@@ -6,3 +6,4 @@ pub mod organization_repository;
 
 pub use organization::{Organization, OrganizationId};
 pub use organization_repository::OrganizationRepository;
+pub use shared::entities::AddressRepository;

@@ -7,8 +7,9 @@ pub mod identifier;
 pub mod use_case;
 
 pub use address::{
-    validator_for_country, Address, AddressValidator, ArgentinaAddressValidator,
-    BrazilAddressValidator, GenericAddressValidator, UnitedStatesAddressValidator,
+    validator_for_country, Address, AddressRepository, AddressValidator,
+    ArgentinaAddressValidator, BrazilAddressValidator, GenericAddressValidator,
+    InMemoryAddressRepository, PostgresAddressRepository, UnitedStatesAddressValidator,
 };
 pub use audit::audit_fields::AuditFields;
 pub use document::{Country, Document, DocumentType};

@@ -1,10 +1,14 @@
 use serde::{Deserialize, Serialize};
+use tsid::TSID;
 
 use crate::entities::address::validator::{validator_for_country, AddressValidator};
+use crate::entities::audit::audit_fields::AuditFields;
 use crate::errors::AddressError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct Address {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<TSID>,
     pub street: String,
     pub number: String,
     pub complement: String,
@@ -16,6 +20,8 @@ pub struct Address {
     pub country: String,
     pub country_code: String,
     pub reference: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audit: Option<AuditFields>,
 }
 
 impl Address {
@@ -34,6 +40,7 @@ impl Address {
         reference: impl Into<String>,
     ) -> Self {
         Self {
+            id: None,
             street: street.into(),
             number: number.into(),
             complement: complement.into(),
@@ -45,6 +52,7 @@ impl Address {
             country: country.into(),
             country_code: country_code.into(),
             reference: reference.into(),
+            audit: None,
         }
     }
 
@@ -77,6 +85,34 @@ impl Address {
         );
         address.validate()?;
         Ok(address)
+    }
+
+    pub fn with_id(mut self, id: TSID) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    pub fn with_audit(mut self, audit: AuditFields) -> Self {
+        self.audit = Some(audit);
+        self
+    }
+
+    pub fn id(&self) -> Option<TSID> {
+        self.id
+    }
+
+    pub fn set_id(&mut self, id: TSID) -> &mut Self {
+        self.id = Some(id);
+        self
+    }
+
+    pub fn audit(&self) -> Option<&AuditFields> {
+        self.audit.as_ref()
+    }
+
+    pub fn set_audit(&mut self, audit: Option<AuditFields>) -> &mut Self {
+        self.audit = audit;
+        self
     }
 
     /// Retorna o validador adequado baseado no código ou nome do país

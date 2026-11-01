@@ -4,10 +4,11 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-chrono = "0.4.45"
-tsid = "0.3.4"
+chrono = { version = "0.4.45", features = ["serde"] }
+tsid = { version = "0.3.4", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 async-trait = "0.1"
 axum = "0.8"
 tokio = { version = "1.43", features = ["full"] }
+tracing = "0.1"
 sqlx = { version = "0.9.0", features = ["runtime-tokio", "postgres", "macros", "chrono"] }

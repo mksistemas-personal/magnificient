@@ -43,8 +43,86 @@ fn setup_test_app() -> axum::Router {
         &config.database.to_connection_config(),
     );
     let repository = organizacao_api::infrastructure::InMemoryOrganizationRepository::new();
-    let state = AppState::new_with_repository(Arc::new(config), db, repository);
+    let address_repository =
+        shared::entities::address::repository::InMemoryAddressRepository::new();
+    let state = AppState::new_with_repositories(
+        Arc::new(config),
+        db,
+        repository,
+        address_repository,
+    );
     create_router(state)
+}
+
+#[tokio::test]
+async fn test_create_and_update_organization_with_address_flow() {
+    let app = setup_test_app();
+
+    // 1. Criar organização
+    let payload = json!({
+        "name": "Empresa Original",
+        "document_value": "00.000.000/0001-91",
+        "document_type": "CNPJ",
+        "created_by": "criador"
+    });
+
+    let res_create = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/organizations")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res_create.status(), StatusCode::CREATED);
+    let body = to_bytes(res_create.into_body(), 1024 * 64).await.unwrap();
+    let json_body: Value = serde_json::from_slice(&body).unwrap();
+    let org_id = json_body["id"].as_str().unwrap();
+
+    // 2. Atualizar com endereço
+    let update_payload = json!({
+        "name": "Empresa com Endereco",
+        "address": {
+            "street": "Av. Paulista",
+            "number": "1000",
+            "complement": "Conjunto 101",
+            "neighborhood": "Bela Vista",
+            "city": "São Paulo",
+            "state": "São Paulo",
+            "state_code": "SP",
+            "postal_code": "01310-100",
+            "country": "Brasil",
+            "country_code": "BR",
+            "reference": "Perto do metro"
+        },
+        "updated_by": "editor"
+    });
+
+    let res_update = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/organizations/{org_id}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&update_payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res_update.status(), StatusCode::OK);
+    let body_update = to_bytes(res_update.into_body(), 1024 * 64).await.unwrap();
+    let json_update: Value = serde_json::from_slice(&body_update).unwrap();
+    assert_eq!(json_update["name"], "Empresa com Endereco");
+    assert_eq!(json_update["address"]["street"], "Av. Paulista");
+    assert_eq!(json_update["address"]["postal_code"], "01310-100");
+    assert_eq!(json_update["audit"]["updated_by"], "editor");
 }
 
 #[tokio::test]

@@ -54,14 +54,17 @@ impl AppState {
             add_organization_use_case: Arc::new(
                 AddOrganizationService::new_with_repositories_and_uow(
                     repository.clone(),
+                    address_repository.clone(),
+                    uow.clone(),
+                ),
+            ),
+            update_organization_use_case: Arc::new(
+                UpdateOrganizationService::new_with_repositories_and_uow(
+                    repository.clone(),
                     address_repository,
                     uow.clone(),
                 ),
             ),
-            update_organization_use_case: Arc::new(UpdateOrganizationService::new_with_uow(
-                repository.clone(),
-                uow.clone(),
-            )),
             delete_organization_use_case: Arc::new(DeleteOrganizationService::new_with_uow(
                 repository.clone(),
                 uow.clone(),
@@ -128,11 +131,14 @@ impl AppState {
             address_repository: Some(Arc::new(address_repository.clone())),
             add_organization_use_case: Arc::new(AddOrganizationService::new_with_repositories(
                 repository.clone(),
-                address_repository,
+                address_repository.clone(),
             )),
-            update_organization_use_case: Arc::new(UpdateOrganizationService::new(
-                repository.clone(),
-            )),
+            update_organization_use_case: Arc::new(
+                UpdateOrganizationService::new_with_repositories(
+                    repository.clone(),
+                    address_repository,
+                ),
+            ),
             delete_organization_use_case: Arc::new(DeleteOrganizationService::new(
                 repository.clone(),
             )),

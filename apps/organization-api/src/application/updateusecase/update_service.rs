@@ -1,94 +1,21 @@
-use crate::application::OrganizationBusinessErrors;
 use crate::application::updateusecase::data::*;
 use crate::application::updateusecase::states::*;
+use crate::application::updateusecase::steps::{
+    ChangeOrganizationContext, LoadOrganizationContext, PersistOrganizationContext,
+    ValidateAddressContext, ValidateInitialContext,
+};
 use crate::domain::{Organization, OrganizationRepository};
 use async_trait::async_trait;
 use database::UnitOfWork;
-use shared::entities::BusinessError;
 use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncUpdateEntityUseCase;
+use shared::entities::{AddressRepository, BusinessError};
 use std::sync::Arc;
-
-trait ValidateInitialContext {
-    fn validate(self) -> Result<Context<Validated, ValidatedContextData>, BusinessError>;
-}
-
-impl ValidateInitialContext for Context<Initial, InitialContextData> {
-    fn validate(self) -> Result<Context<Validated, ValidatedContextData>, BusinessError> {
-        let request = self.data.request;
-
-        if !request.organization_id.is_valid() {
-            return Err(OrganizationBusinessErrors::id_invalid());
-        }
-        if request.name.trim().is_empty() {
-            return Err(OrganizationBusinessErrors::name_empty());
-        }
-        if request.updated_by.trim().is_empty() {
-            return Err(OrganizationBusinessErrors::updater_required());
-        }
-
-        Ok(Context::new(ValidatedContextData { request }))
-    }
-}
-
-trait LoadOrganizationContext {
-    async fn load(
-        self,
-        repository: &dyn OrganizationRepository,
-    ) -> Result<Context<Loaded, LoadedContextData>, BusinessError>;
-}
-
-impl LoadOrganizationContext for Context<Validated, ValidatedContextData> {
-    async fn load(
-        self,
-        repository: &dyn OrganizationRepository,
-    ) -> Result<Context<Loaded, LoadedContextData>, BusinessError> {
-        let org_id = self.data.request.organization_id;
-        let organization = repository.find_by_id(*org_id).await?;
-
-        Ok(Context::new(LoadedContextData {
-            request: self.data.request,
-            organization,
-        }))
-    }
-}
-
-trait ChangeOrganizationContext {
-    fn change(self) -> Result<Context<Changed, ChangedContextData>, BusinessError>;
-}
-
-impl ChangeOrganizationContext for Context<Loaded, LoadedContextData> {
-    fn change(mut self) -> Result<Context<Changed, ChangedContextData>, BusinessError> {
-        let name = self.data.request.name;
-        let updated_by = self.data.request.updated_by;
-
-        self.data.organization.update(name, updated_by);
-
-        Ok(Context::new(ChangedContextData {
-            organization: self.data.organization,
-        }))
-    }
-}
-
-trait PersistOrganizationContext {
-    async fn save(
-        self,
-        repository: &dyn OrganizationRepository,
-    ) -> Result<Organization, BusinessError>;
-}
-
-impl PersistOrganizationContext for Context<Changed, ChangedContextData> {
-    async fn save(
-        self,
-        repository: &dyn OrganizationRepository,
-    ) -> Result<Organization, BusinessError> {
-        repository.save(&self.data.organization).await
-    }
-}
 
 #[derive(Clone)]
 pub struct UpdateOrganizationService {
     repository: Arc<dyn OrganizationRepository>,
+    address_repository: Option<Arc<dyn AddressRepository>>,
     uow: Option<UnitOfWork>,
 }
 
@@ -96,7 +23,31 @@ impl UpdateOrganizationService {
     pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
         Self {
             repository: Arc::new(repository),
+            address_repository: None,
             uow: None,
+        }
+    }
+
+    pub fn new_with_repositories(
+        repository: impl OrganizationRepository + 'static,
+        address_repository: impl AddressRepository + 'static,
+    ) -> Self {
+        Self {
+            repository: Arc::new(repository),
+            address_repository: Some(Arc::new(address_repository)),
+            uow: None,
+        }
+    }
+
+    pub fn new_with_repositories_and_uow(
+        repository: impl OrganizationRepository + 'static,
+        address_repository: impl AddressRepository + 'static,
+        uow: UnitOfWork,
+    ) -> Self {
+        Self {
+            repository: Arc::new(repository),
+            address_repository: Some(Arc::new(address_repository)),
+            uow: Some(uow),
         }
     }
 
@@ -106,23 +57,7 @@ impl UpdateOrganizationService {
     ) -> Self {
         Self {
             repository: Arc::new(repository),
-            uow: Some(uow),
-        }
-    }
-
-    pub fn new_with_arc(repository: Arc<dyn OrganizationRepository>) -> Self {
-        Self {
-            repository,
-            uow: None,
-        }
-    }
-
-    pub fn new_with_arc_and_uow(
-        repository: Arc<dyn OrganizationRepository>,
-        uow: UnitOfWork,
-    ) -> Self {
-        Self {
-            repository,
+            address_repository: None,
             uow: Some(uow),
         }
     }
@@ -136,13 +71,6 @@ impl UpdateOrganizationService {
         )
         .await
     }
-
-    async fn execute_transactional_pipeline(
-        validated: Context<Validated, ValidatedContextData>,
-        repo: &dyn OrganizationRepository,
-    ) -> Result<Organization, BusinessError> {
-        validated.load(repo).await?.change()?.save(repo).await
-    }
 }
 
 #[async_trait]
@@ -153,16 +81,18 @@ impl AsyncUpdateEntityUseCase<UpdateOrganizationRequest, Organization>
         &self,
         request: UpdateOrganizationRequest,
     ) -> Result<Organization, BusinessError> {
-        let validated = Context::<Initial, _>::new(InitialContextData { request }).validate()?;
-
-        if let Some(uow) = &self.uow {
-            uow.run_tx(|_tx| {
-                Self::execute_transactional_pipeline(validated, self.repository.as_ref())
-            })
+        Context::<Initial, _>::new(InitialContextData { request })
+            .validate()?
+            .validate_address()?
+            .load(self.repository.as_ref())
+            .await?
+            .change()?
+            .save(
+                self.repository.as_ref(),
+                self.address_repository.as_deref(),
+                self.uow.as_ref(),
+            )
             .await
-        } else {
-            Self::execute_transactional_pipeline(validated, self.repository.as_ref()).await
-        }
     }
 }
 
@@ -170,8 +100,10 @@ impl AsyncUpdateEntityUseCase<UpdateOrganizationRequest, Organization>
 mod tests {
     use super::*;
     use crate::domain::OrganizationId;
+    use crate::errors::OrganizationBusinessErrors;
     use crate::infrastructure::InMemoryOrganizationRepository;
-    use shared::entities::{AuditFields, Document, DocumentType, TSID};
+    use shared::entities::address::repository::InMemoryAddressRepository;
+    use shared::entities::{Address, AuditFields, Document, DocumentType, TSID};
 
     #[tokio::test]
     async fn test_update_organization_service_full_flow() {
@@ -188,6 +120,7 @@ mod tests {
         let update_req = UpdateOrganizationRequest {
             organization_id: org_id,
             name: "Novo Nome".to_string(),
+            address: None,
             updated_by: "editor".to_string(),
         };
 
@@ -202,6 +135,85 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_update_organization_service_with_address() {
+        let repo = InMemoryOrganizationRepository::new();
+        let address_repo = InMemoryAddressRepository::new();
+        let org_id = OrganizationId::new(TSID::from(100u64));
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Nome Original", doc)
+            .with_audit(AuditFields::created("admin"));
+
+        repo.save(&org).await.unwrap();
+
+        let service =
+            UpdateOrganizationService::new_with_repositories(repo, address_repo.clone());
+
+        let address = Address::new(
+            "Av. Paulista",
+            "1000",
+            "Conjunto 101",
+            "Bela Vista",
+            "São Paulo",
+            "São Paulo",
+            "SP",
+            "01310-100",
+            "Brasil",
+            "BR",
+            "Próximo ao metrô",
+        );
+
+        let update_req = UpdateOrganizationRequest::new(org_id, "Novo Nome", "editor")
+            .with_address(address.clone());
+
+        let result = service.execute(update_req).await;
+        assert!(result.is_ok());
+
+        let updated = result.unwrap();
+        assert_eq!(updated.name(), "Novo Nome");
+        assert!(updated.address().is_some());
+        let saved_addr = updated.address().unwrap();
+        assert_eq!(saved_addr.street, "Av. Paulista");
+        assert!(saved_addr.id().is_some());
+
+        // Verify that address is persisted in address repository
+        let addr_in_repo = address_repo.find_by_id(saved_addr.id().unwrap()).await;
+        assert!(addr_in_repo.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_update_organization_service_with_invalid_address() {
+        let repo = InMemoryOrganizationRepository::new();
+        let address_repo = InMemoryAddressRepository::new();
+        let org_id = OrganizationId::new(TSID::from(100u64));
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Nome Original", doc);
+        repo.save(&org).await.unwrap();
+
+        let service = UpdateOrganizationService::new_with_repositories(repo, address_repo);
+
+        // Invalid CEP for Brazil
+        let invalid_address = Address::new(
+            "Av. Paulista",
+            "1000",
+            "",
+            "Bela Vista",
+            "São Paulo",
+            "São Paulo",
+            "SP",
+            "123", // invalid
+            "Brasil",
+            "BR",
+            "",
+        );
+
+        let update_req = UpdateOrganizationRequest::new(org_id, "Novo Nome", "editor")
+            .with_address(invalid_address);
+
+        let result = service.execute(update_req).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
     async fn test_update_organization_service_not_found() {
         let repo = InMemoryOrganizationRepository::new();
         let service = UpdateOrganizationService::new(repo);
@@ -209,6 +221,7 @@ mod tests {
         let update_req = UpdateOrganizationRequest {
             organization_id: OrganizationId::new(TSID::from(999u64)),
             name: "Empresa Inexistente".to_string(),
+            address: None,
             updated_by: "editor".to_string(),
         };
 
@@ -226,6 +239,7 @@ mod tests {
         let invalid_name_req = UpdateOrganizationRequest {
             organization_id: org_id,
             name: "".to_string(),
+            address: None,
             updated_by: "editor".to_string(),
         };
         assert_eq!(
@@ -236,6 +250,7 @@ mod tests {
         let invalid_updater_req = UpdateOrganizationRequest {
             organization_id: org_id,
             name: "Nome".to_string(),
+            address: None,
             updated_by: "".to_string(),
         };
         assert_eq!(

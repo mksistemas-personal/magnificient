@@ -94,7 +94,7 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
             .cloned()
             .collect();
 
-        list.sort_by(|a, b| a.id().cmp(&b.id()));
+        list.sort_by_key(|a| a.id());
 
         let offset = page_request.offset() as usize;
         let limit = page_request.limit() as usize;

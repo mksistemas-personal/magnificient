@@ -1,5 +1,5 @@
 use std::fmt;
-use crate::errors::{DocumentError, IdentifierError};
+use crate::errors::{AddressError, DocumentError, IdentifierError};
 
 /// Enum de erros de negócio para uso padronizado em casos de uso (Use Cases).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +81,12 @@ impl From<DocumentError> for BusinessError {
     }
 }
 
+impl From<AddressError> for BusinessError {
+    fn from(err: AddressError) -> Self {
+        BusinessError::InvalidData(format!("Endereço inválido: {err}"))
+    }
+}
+
 impl From<IdentifierError> for BusinessError {
     fn from(err: IdentifierError) -> Self {
         BusinessError::InvalidData(format!("Identificador inválido: {err}"))
@@ -108,6 +114,10 @@ mod tests {
     fn test_business_error_conversions() {
         let doc_err = DocumentError::EmptyDocument;
         let bus_err: BusinessError = doc_err.into();
+        assert!(matches!(bus_err, BusinessError::InvalidData(_)));
+
+        let addr_err = AddressError::EmptyField("street");
+        let bus_err: BusinessError = addr_err.into();
         assert!(matches!(bus_err, BusinessError::InvalidData(_)));
 
         let id_err = IdentifierError::NonPositiveValue(0);

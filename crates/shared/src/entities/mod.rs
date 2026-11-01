@@ -1,10 +1,16 @@
 // Entidades compartilhadas
 
+pub mod address;
 pub mod audit;
 pub mod document;
 pub mod identifier;
 pub mod use_case;
 
+pub use address::{
+    validator_for_country, Address, AddressRepository, AddressValidator,
+    ArgentinaAddressValidator, BrazilAddressValidator, GenericAddressValidator,
+    InMemoryAddressRepository, PostgresAddressRepository, UnitedStatesAddressValidator,
+};
 pub use audit::audit_fields::AuditFields;
 pub use document::{Country, Document, DocumentType};
 pub use identifier::{EntityId, Id, TSID};

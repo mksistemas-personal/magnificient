@@ -3,5 +3,5 @@
 pub mod message_publisher;
 pub mod rabbitmq;
 
-pub use message_publisher::{MessagePublisher, RabbitMqPublisher};
-pub use rabbitmq::{create_rabbitmq_client, RabbitMq, RabbitMqConfig};
+pub use message_publisher::{MessageHeaders, MessagePublisher, RabbitMqPublisher};
+pub use rabbitmq::{RabbitMq, RabbitMqConfig, create_rabbitmq_client};

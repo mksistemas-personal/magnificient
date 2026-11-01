@@ -1,5 +1,5 @@
 use shared::entities::audit::audit_fields::AuditFields;
-use shared::entities::{Document, EntityId};
+use shared::entities::{Address, Document, EntityId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct OrganizationMarker;
@@ -11,6 +11,7 @@ pub struct Organization {
     pub id: OrganizationId,
     pub name: String,
     pub document: Document,
+    pub address: Option<Address>,
     pub audit: Option<AuditFields>,
 }
 
@@ -20,8 +21,14 @@ impl Organization {
             id,
             name: name.into(),
             document,
+            address: None,
             audit: None,
         }
+    }
+
+    pub fn with_address(mut self, address: Address) -> Self {
+        self.address = Some(address);
+        self
     }
 
     pub fn with_audit(mut self, audit: AuditFields) -> Self {
@@ -40,6 +47,11 @@ impl Organization {
         self
     }
 
+    pub fn set_address(&mut self, address: Option<Address>) -> &mut Self {
+        self.address = address;
+        self
+    }
+
     pub fn id(&self) -> OrganizationId {
         self.id
     }
@@ -50,6 +62,10 @@ impl Organization {
 
     pub fn document(&self) -> &Document {
         &self.document
+    }
+
+    pub fn address(&self) -> Option<&Address> {
+        self.address.as_ref()
     }
 }
 
@@ -67,6 +83,56 @@ mod tests {
         assert_eq!(org.id(), OrganizationId::new(TSID::from(100u64)));
         assert_eq!(org.name(), "Minha Empresa");
         assert_eq!(org.document().value(), "00.000.000/0001-91");
+        assert_eq!(org.address(), None);
+    }
+
+    #[test]
+    fn test_create_organization_with_address() {
+        let org_id = OrganizationId::new(TSID::from(100u64));
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let address = Address::new(
+            "Av. Paulista",
+            "1000",
+            "Conjunto 101",
+            "Bela Vista",
+            "São Paulo",
+            "São Paulo",
+            "SP",
+            "01310-100",
+            "Brasil",
+            "BR",
+            "Próximo ao metrô",
+        );
+        let org = Organization::new(org_id, "Minha Empresa", doc).with_address(address.clone());
+
+        assert_eq!(org.address(), Some(&address));
+    }
+
+    #[test]
+    fn test_update_organization_address() {
+        let org_id = OrganizationId::new(TSID::from(100u64));
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let mut org = Organization::new(org_id, "Minha Empresa", doc);
+        assert_eq!(org.address(), None);
+
+        let address = Address::new(
+            "Rua das Flores",
+            "123",
+            "",
+            "Centro",
+            "Curitiba",
+            "Paraná",
+            "PR",
+            "80000-000",
+            "Brasil",
+            "BR",
+            "",
+        );
+        org.set_address(Some(address.clone()));
+        assert_eq!(org.address(), Some(&address));
+
+        org.set_address(None);
+        assert_eq!(org.address(), None);
     }
 
     #[test]

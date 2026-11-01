@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Entidade que encapsula os campos de auditoria de registros do sistema.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuditFields {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

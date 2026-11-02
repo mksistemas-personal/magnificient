@@ -75,7 +75,9 @@ pub struct LoggingConfig {
 impl OrganizationAppConfig {
     pub fn load() -> Result<Self, ConfigError> {
         let settings = Config::builder()
-            .add_source(config::File::with_name("apps/organization-api/cfg/default"))
+            .add_source(
+                config::File::with_name("apps/organization-api/cfg/default").required(false),
+            )
             .add_source(config::Environment::with_prefix("APP").separator("__"))
             .build()?;
         settings.try_deserialize()

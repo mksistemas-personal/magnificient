@@ -32,6 +32,38 @@ pub async fn create_organization(
     let organization = state.add_organization_use_case.execute(request).await?;
     let response = OrganizationResponseDto::from(organization.clone());
     let event = OrganizationEvent::add(organization.clone());
+    publish_message(state, &event).await?;
+    Ok((StatusCode::CREATED, Json(response)))
+}
+
+pub async fn update_organization(
+    State(state): State<AppState>,
+    Path(id): Path<TSID>,
+    Json(payload): Json<UpdateOrganizationDto>,
+) -> Result<impl IntoResponse, ApiError> {
+    let organization_id: OrganizationId = id.into();
+    let request: UpdateOrganizationRequest = payload.into_request(organization_id);
+    let organization = state.update_organization_use_case.execute(request).await?;
+    let response = OrganizationResponseDto::from(organization.clone());
+    let event = OrganizationEvent::update(organization.clone());
+    publish_message(state, &event).await?;
+    Ok((StatusCode::OK, Json(response)))
+}
+
+pub async fn delete_organization(
+    State(state): State<AppState>,
+    Path(id): Path<TSID>,
+    Query(params): Query<DeleteOrganizationParams>,
+) -> Result<impl IntoResponse, ApiError> {
+    let organization_id: OrganizationId = id.into();
+    let request: DeleteOrganizationRequest = params.into_request(organization_id);
+    state.delete_organization_use_case.execute(request).await?;
+    let event = OrganizationEvent::delete(organization_id);
+    publish_message(state, &event).await?;
+    Ok(StatusCode::OK)
+}
+
+async fn publish_message(state: AppState, event: &OrganizationEvent) -> Result<(), ApiError> {
     if let Some(publisher) = state.message_publisher.as_ref() {
         publisher
             .publish_json(
@@ -46,42 +78,7 @@ pub async fn create_organization(
             )
             .await?;
     }
-    Ok((StatusCode::CREATED, Json(response)))
-}
-
-pub async fn update_organization(
-    State(state): State<AppState>,
-    Path(id): Path<TSID>,
-    Json(payload): Json<UpdateOrganizationDto>,
-) -> Result<impl IntoResponse, ApiError> {
-    let organization_id: OrganizationId = id.into();
-    let request: UpdateOrganizationRequest = payload.into_request(organization_id);
-    let organization = state.update_organization_use_case.execute(request).await?;
-    let response = OrganizationResponseDto::from(organization.clone());
-    let event = OrganizationEvent::update(organization.clone());
-    if let Some(publisher) = state.message_publisher.as_ref() {
-        publisher
-            .publish_json(ORGANIZATION_EXCHANGE_NAME, ROUTING_KEY, &event, None)
-            .await?;
-    }
-    Ok((StatusCode::OK, Json(response)))
-}
-
-pub async fn delete_organization(
-    State(state): State<AppState>,
-    Path(id): Path<TSID>,
-    Query(params): Query<DeleteOrganizationParams>,
-) -> Result<impl IntoResponse, ApiError> {
-    let organization_id: OrganizationId = id.into();
-    let request: DeleteOrganizationRequest = params.into_request(organization_id);
-    state.delete_organization_use_case.execute(request).await?;
-    let event = OrganizationEvent::delete(organization_id);
-    if let Some(publisher) = state.message_publisher.as_ref() {
-        publisher
-            .publish_json(ORGANIZATION_EXCHANGE_NAME, ROUTING_KEY, &event, None)
-            .await?;
-    }
-    Ok(StatusCode::NO_CONTENT)
+    Ok(())
 }
 
 pub async fn getbyid_organization(

@@ -1,0 +1,287 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: magnificient
+  labels:
+    app.kubernetes.io/part-of: magnificient
+    app.kubernetes.io/name: organization-api
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: magnificient-middleware-credentials
+  namespace: magnificient
+type: Opaque
+stringData:
+  POSTGRES_USER: magnificient
+  POSTGRES_PASSWORD: change-me-before-production
+  POSTGRES_DB: magnificient
+  RABBITMQ_DEFAULT_USER: magnificient
+  RABBITMQ_DEFAULT_PASS: change-me-before-production
+  APP__RABBITMQ__RABBITMQ_URL: amqp://magnificient:change-me-before-production@rabbitmq:5672/%2f
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: organization-api-config
+  namespace: magnificient
+data:
+  APP__SERVER__HOST: "0.0.0.0"
+  APP__SERVER__PORT: "8181"
+  APP__DATABASE__HOST: postgres
+  APP__DATABASE__PORT: "5432"
+  APP__DATABASE__NAME: magnificient
+  APP__DATABASE__USERNAME: magnificient
+  APP__DATABASE__MAX_CONNECTIONS: "10"
+  APP__DATABASE__MIN_CONNECTIONS: "1"
+  APP__DATABASE__ACQUIRE_TIMEOUT_SECS: "30"
+  APP__RABBITMQ__RABBITMQ_PREFETCH_COUNT: "10"
+  APP__RABBITMQ__RABBITMQ_RECONNECT_MAX_ATTEMPTS: "0"
+  APP__RABBITMQ__RABBITMQ_RECONNECT_INITIAL_MS: "1000"
+  APP__RABBITMQ__RABBITMQ_RECONNECT_MAX_MS: "30000"
+  APP__RABBITMQ__RABBITMQ_RETRY_MAX_ATTEMPTS: "3"
+  APP__RABBITMQ__RABBITMQ_RETRY_INITIAL_MS: "1000"
+  APP__RABBITMQ__RABBITMQ_RETRY_MAX_MS: "10000"
+  APP__LOGGING__LEVEL: info
+  RUST_LOG: info,organizacao_api=debug,tower_http=debug,database=debug
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: magnificient
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: magnificient
+spec:
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+  selector:
+    app.kubernetes.io/name: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: magnificient
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: magnificient
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: magnificient-middleware-credentials
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: magnificient-middleware-credentials
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: magnificient-middleware-credentials
+                  key: POSTGRES_DB
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: magnificient
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/part-of: magnificient
+spec:
+  clusterIP: None
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+  selector:
+    app.kubernetes.io/name: rabbitmq
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: magnificient
+spec:
+  serviceName: rabbitmq
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rabbitmq
+        app.kubernetes.io/part-of: magnificient
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:4-management
+          ports:
+            - name: amqp
+              containerPort: 5672
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: magnificient-middleware-credentials
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: magnificient-middleware-credentials
+                  key: RABBITMQ_DEFAULT_PASS
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: organization-api
+  namespace: magnificient
+  labels:
+    app.kubernetes.io/name: organization-api
+    app.kubernetes.io/part-of: magnificient
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8181
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: organization-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: organization-api
+  namespace: magnificient
+  labels:
+    app.kubernetes.io/name: organization-api
+    app.kubernetes.io/part-of: magnificient
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: organization-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: organization-api
+        app.kubernetes.io/part-of: magnificient
+    spec:
+      containers:
+        - name: organization-api
+          image: magnificient/organizacao-api:0.1.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8181
+          envFrom:
+            - configMapRef:
+                name: organization-api-config
+          env:
+            - name: APP__DATABASE__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: magnificient-middleware-credentials
+                  key: POSTGRES_PASSWORD
+            - name: APP__RABBITMQ__RABBITMQ_URL
+              valueFrom:
+                secretKeyRef:
+                  name: magnificient-middleware-credentials
+                  key: APP__RABBITMQ__RABBITMQ_URL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10

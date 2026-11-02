@@ -13,12 +13,12 @@ COPY crates ./crates
 RUN cargo build --release -p organizacao-api
 
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 WORKDIR /app
 
 COPY --from=builder /workspace/target/release/organizacao-api .
 
-EXPOSE 8080
+EXPOSE 8181
 
 CMD ["./organizacao-api"]

@@ -1,6 +1,6 @@
 use crate::application::OrganizationBusinessErrors;
-use crate::application::byidusecase::data::*;
-use crate::application::byidusecase::states::*;
+use crate::application::by_id_usecase::data::*;
+use crate::application::by_id_usecase::states::*;
 use crate::domain::{Organization, OrganizationRepository};
 use async_trait::async_trait;
 use database::UnitOfWork;

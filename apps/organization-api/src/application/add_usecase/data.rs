@@ -52,6 +52,5 @@ pub struct AddressValidatedContextData {
 }
 
 pub struct CreatedContextData {
-    pub request: AddOrganizationRequest,
     pub organization: Organization,
 }

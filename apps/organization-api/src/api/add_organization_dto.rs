@@ -1,7 +1,7 @@
-use crate::api::organization_shared_dtos::default_document_type;
-use crate::api::organization_shared_dtos::default_user;
-use crate::api::organization_shared_dtos::parse_document_type;
-use crate::application::addusecase::data::AddOrganizationRequest;
+use crate::api::organization_shared_dto::default_document_type;
+use crate::api::organization_shared_dto::default_user;
+use crate::api::organization_shared_dto::parse_document_type;
+use crate::application::AddOrganizationRequest;
 use serde::{Deserialize, Serialize};
 use shared::entities::Address;
 use shared::errors::api_error::ApiError;
@@ -37,7 +37,7 @@ impl TryFrom<CreateOrganizationDto> for AddOrganizationRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::organization_shared_dtos::OrganizationResponseDto;
+    use crate::api::organization_shared_dto::OrganizationResponseDto;
     use crate::domain::Organization;
     use shared::entities::{AuditFields, Document, DocumentType};
     use tsid::TSID;

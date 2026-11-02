@@ -1,8 +1,10 @@
 use crate::application::OrganizationBusinessErrors;
-use crate::application::addusecase::data::{
+use crate::application::add_usecase::data::{
     AddressValidatedContextData, CreatedContextData, InitialContextData, ValidatedContextData,
 };
-use crate::application::addusecase::{AddressValidated, Built, Initial, OrganizationValidated};
+use crate::application::add_usecase::states::{
+    AddressValidated, Built, Initial, OrganizationValidated,
+};
 use crate::domain::{Organization, OrganizationId, OrganizationRepository};
 use async_trait::async_trait;
 use database::UnitOfWork;
@@ -105,10 +107,7 @@ impl BuildOrganizationContext for Context<AddressValidated, AddressValidatedCont
         }
 
         Ok(Context::<Built, CreatedContextData>::new(
-            CreatedContextData {
-                request,
-                organization,
-            },
+            CreatedContextData { organization },
         ))
     }
 }

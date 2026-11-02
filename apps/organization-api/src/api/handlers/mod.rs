@@ -1,2 +1,2 @@
-pub mod health;
-pub mod organizations_controller;
+pub(super) mod health;
+pub(super) mod organizations_controller;

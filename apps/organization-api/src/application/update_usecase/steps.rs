@@ -1,9 +1,9 @@
 use crate::application::OrganizationBusinessErrors;
-use crate::application::updateusecase::data::{
+use crate::application::update_usecase::data::{
     AddressValidatedContextData, ChangedContextData, InitialContextData, LoadedContextData,
     ValidatedContextData,
 };
-use crate::application::updateusecase::states::{
+use crate::application::update_usecase::states::{
     AddressValidated, Changed, Initial, Loaded, OrganizationValidated, Validated,
 };
 use crate::domain::{Organization, OrganizationRepository};

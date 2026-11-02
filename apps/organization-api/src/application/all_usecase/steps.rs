@@ -1,5 +1,5 @@
-use crate::application::allusecase::data::{InitialContextData, ValidatedContextData};
-use crate::application::allusecase::states::{Initial, Validated};
+use crate::application::all_usecase::data::{InitialContextData, ValidatedContextData};
+use crate::application::all_usecase::states::{Initial, Validated};
 use crate::domain::{Organization, OrganizationRepository};
 use async_trait::async_trait;
 use database::UnitOfWork;

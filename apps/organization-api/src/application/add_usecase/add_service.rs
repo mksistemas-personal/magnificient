@@ -1,8 +1,6 @@
-use crate::application::addusecase::data::{
-    AddOrganizationRequest, InitialContextData,
-};
-use crate::application::addusecase::states::Initial;
-use crate::application::addusecase::steps::{
+use crate::application::add_usecase::data::{AddOrganizationRequest, InitialContextData};
+use crate::application::add_usecase::states::Initial;
+use crate::application::add_usecase::steps::{
     BuildOrganizationContext, PersistOrganizationContext, ValidateAddressContext,
     ValidateInitialContext,
 };

@@ -60,7 +60,7 @@ pub async fn delete_organization(
     state.delete_organization_use_case.execute(request).await?;
     let event = OrganizationEvent::delete(organization_id);
     publish_message(state, &event).await?;
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn publish_message(state: AppState, event: &OrganizationEvent) -> Result<(), ApiError> {

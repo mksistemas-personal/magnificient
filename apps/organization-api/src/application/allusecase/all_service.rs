@@ -1,5 +1,6 @@
 use crate::application::allusecase::data::*;
 use crate::application::allusecase::states::*;
+use crate::application::allusecase::steps::{FindOrganizationsContext, ValidateInitialContext};
 use crate::domain::{Organization, OrganizationRepository};
 use async_trait::async_trait;
 use database::UnitOfWork;
@@ -8,37 +9,6 @@ use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncGetAllUseCase;
 use shared::types::page::Page;
 use std::sync::Arc;
-
-trait ValidateInitialContext {
-    fn validate(self) -> Result<Context<Validated, ValidatedContextData>, BusinessError>;
-}
-
-impl ValidateInitialContext for Context<Initial, InitialContextData> {
-    fn validate(self) -> Result<Context<Validated, ValidatedContextData>, BusinessError> {
-        let request = self.data.request;
-        Ok(Context::new(ValidatedContextData { request }))
-    }
-}
-
-trait FindOrganizationsContext {
-    async fn find(
-        self,
-        repository: &dyn OrganizationRepository,
-    ) -> Result<Page<Organization>, BusinessError>;
-}
-
-impl FindOrganizationsContext for Context<Validated, ValidatedContextData> {
-    async fn find(
-        self,
-        repository: &dyn OrganizationRepository,
-    ) -> Result<Page<Organization>, BusinessError> {
-        let name_filter = self.data.request.name.as_deref();
-        let page_req = &self.data.request.page_request;
-        let content = repository.find_all(name_filter, page_req).await?;
-        let total = repository.count(name_filter).await?;
-        Ok(Page::new(content, page_req.page, page_req.page_size, total))
-    }
-}
 
 #[derive(Clone)]
 pub struct FindAllOrganizationsService {
@@ -64,28 +34,6 @@ impl FindAllOrganizationsService {
         }
     }
 
-    pub fn new_with_arc(repository: Arc<dyn OrganizationRepository>) -> Self {
-        Self {
-            repository,
-            uow: None,
-        }
-    }
-
-    pub fn new_with_arc_and_uow(
-        repository: Arc<dyn OrganizationRepository>,
-        uow: UnitOfWork,
-    ) -> Self {
-        Self {
-            repository,
-            uow: Some(uow),
-        }
-    }
-
-    pub fn with_uow(mut self, uow: UnitOfWork) -> Self {
-        self.uow = Some(uow);
-        self
-    }
-
     pub async fn execute(
         &self,
         request: FindAllOrganizationsRequest,
@@ -94,13 +42,6 @@ impl FindAllOrganizationsService {
             self, request,
         )
         .await
-    }
-
-    async fn execute_pipeline(
-        validated: Context<Validated, ValidatedContextData>,
-        repo: &dyn OrganizationRepository,
-    ) -> Result<Page<Organization>, BusinessError> {
-        validated.find(repo).await
     }
 }
 
@@ -115,8 +56,10 @@ impl AsyncGetAllUseCase<FindAllOrganizationsRequest, Page<Organization>>
         &self,
         request: FindAllOrganizationsRequest,
     ) -> Result<Page<Organization>, BusinessError> {
-        let validated = Context::<Initial, _>::new(InitialContextData { request }).validate()?;
-        Self::execute_pipeline(validated, self.repository.as_ref()).await
+        Context::<Initial, _>::new(InitialContextData { request })
+            .validate()?
+            .find(self.repository.as_ref(), self.uow.as_ref())
+            .await
     }
 }
 

@@ -1,5 +1,5 @@
-use crate::api::organization_shared_dtos::default_user;
-use crate::application::deleteusecase::data::DeleteOrganizationRequest;
+use crate::api::organization_shared_dto::default_user;
+use crate::application::DeleteOrganizationRequest;
 use crate::domain::OrganizationId;
 use serde::{Deserialize, Serialize};
 

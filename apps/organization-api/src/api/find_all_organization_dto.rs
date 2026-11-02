@@ -1,4 +1,4 @@
-use crate::application::allusecase::data::FindAllOrganizationsRequest;
+use crate::application::FindAllOrganizationsRequest;
 use serde::{Deserialize, Serialize};
 use shared::types::page::PageRequest;
 
@@ -35,7 +35,6 @@ impl From<FindAllOrganizationsParams> for FindAllOrganizationsRequest {
 }
 
 pub type GetAllOrganizationsParams = FindAllOrganizationsParams;
-pub type FindOrganizationsQuery = FindAllOrganizationsParams;
 pub type FindAllOrganizationsQuery = FindAllOrganizationsParams;
 
 #[cfg(test)]

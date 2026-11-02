@@ -1,6 +1,6 @@
-use crate::application::updateusecase::data::*;
-use crate::application::updateusecase::states::*;
-use crate::application::updateusecase::steps::{
+use crate::application::update_usecase::data::*;
+use crate::application::update_usecase::states::*;
+use crate::application::update_usecase::steps::{
     ChangeOrganizationContext, LoadOrganizationContext, PersistOrganizationContext,
     ValidateAddressContext, ValidateInitialContext,
 };
@@ -145,8 +145,7 @@ mod tests {
 
         repo.save(&org).await.unwrap();
 
-        let service =
-            UpdateOrganizationService::new_with_repositories(repo, address_repo.clone());
+        let service = UpdateOrganizationService::new_with_repositories(repo, address_repo.clone());
 
         let address = Address::new(
             "Av. Paulista",

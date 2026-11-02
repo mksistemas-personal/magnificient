@@ -1,6 +1,6 @@
-use crate::application::allusecase::data::*;
-use crate::application::allusecase::states::*;
-use crate::application::allusecase::steps::{FindOrganizationsContext, ValidateInitialContext};
+use crate::application::all_usecase::data::*;
+use crate::application::all_usecase::states::*;
+use crate::application::all_usecase::steps::{FindOrganizationsContext, ValidateInitialContext};
 use crate::domain::{Organization, OrganizationRepository};
 use async_trait::async_trait;
 use database::UnitOfWork;

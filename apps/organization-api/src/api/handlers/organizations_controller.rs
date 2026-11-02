@@ -1,14 +1,13 @@
-use crate::api::add_organization_dtos::CreateOrganizationDto;
-use crate::api::delete_organization_dtos::DeleteOrganizationParams;
-use crate::api::find_all_organization_dtos::FindAllOrganizationsParams;
-use crate::api::organization_shared_dtos::OrganizationResponseDto;
+use crate::api::add_organization_dto::CreateOrganizationDto;
+use crate::api::delete_organization_dto::DeleteOrganizationParams;
+use crate::api::find_all_organization_dto::FindAllOrganizationsParams;
+use crate::api::organization_shared_dto::OrganizationResponseDto;
 use crate::api::state::AppState;
-use crate::api::update_organization_dtos::UpdateOrganizationDto;
-use crate::application::FindOrganizationByIdRequest;
-use crate::application::addusecase::data::AddOrganizationRequest;
-use crate::application::allusecase::data::FindAllOrganizationsRequest;
-use crate::application::deleteusecase::data::DeleteOrganizationRequest;
-use crate::application::updateusecase::data::UpdateOrganizationRequest;
+use crate::api::update_organization_dto::UpdateOrganizationDto;
+use crate::application::{
+    AddOrganizationRequest, DeleteOrganizationRequest, FindAllOrganizationsRequest,
+    FindOrganizationByIdRequest, UpdateOrganizationRequest,
+};
 use crate::domain::OrganizationId;
 use crate::domain::message_events::OrganizationEvent;
 use axum::extract::{Path, Query, State};

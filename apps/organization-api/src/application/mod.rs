@@ -1,20 +1,20 @@
 // Casos de uso e serviços da aplicação
 
-pub mod addusecase;
-pub mod allusecase;
-pub mod byidusecase;
-pub mod deleteusecase;
-pub mod updateusecase;
+mod add_usecase;
+mod all_usecase;
+mod by_id_usecase;
+mod delete_usecase;
+mod update_usecase;
 
 pub use crate::errors::{OrganizationBusinessErrors, OrganizationErrors};
-pub use addusecase::{AddOrganizationRequest, AddOrganizationService};
-pub use allusecase::{
+pub use add_usecase::{AddOrganizationRequest, AddOrganizationService};
+pub use all_usecase::{
     FindAllOrganizationsRequest, FindAllOrganizationsService, FindOrganizationsByNameRequest,
     FindOrganizationsByNameService, GetAllOrganizationsRequest, GetAllOrganizationsService,
 };
-pub use byidusecase::{
+pub use by_id_usecase::{
     FindOrganizationByIdRequest, FindOrganizationByIdService, GetOrganizationByIdRequest,
     GetOrganizationByIdService,
 };
-pub use deleteusecase::{DeleteOrganizationRequest, DeleteOrganizationService};
-pub use updateusecase::{UpdateOrganizationRequest, UpdateOrganizationService};
+pub use delete_usecase::{DeleteOrganizationRequest, DeleteOrganizationService};
+pub use update_usecase::{UpdateOrganizationRequest, UpdateOrganizationService};

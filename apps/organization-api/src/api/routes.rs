@@ -25,7 +25,7 @@ pub fn create_router(state: AppState) -> Router {
             "/api/v1/organizations/{id}",
             put(organizations_controller::update_organization)
                 .delete(organizations_controller::delete_organization)
-                .get(organizations_controller::getbyid_organization),
+                .get(organizations_controller::get_by_id_organization),
         )
         .layer(TraceLayer::new_for_http())
         .layer(cors)

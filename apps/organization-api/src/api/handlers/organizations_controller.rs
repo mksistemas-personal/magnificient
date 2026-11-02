@@ -81,7 +81,7 @@ async fn publish_message(state: AppState, event: &OrganizationEvent) -> Result<(
     Ok(())
 }
 
-pub async fn getbyid_organization(
+pub async fn get_by_id_organization(
     State(state): State<AppState>,
     Path(id): Path<TSID>,
 ) -> Result<impl IntoResponse, ApiError> {

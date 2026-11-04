@@ -6,7 +6,7 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tracing::error;
-use tsid::{create_tsid, TSID};
+use tsid::{TSID, create_tsid};
 
 /// Trait que define o contrato de persistência para a entidade `Address`.
 #[async_trait]
@@ -28,6 +28,14 @@ pub trait AddressRepository: Send + Sync {
 
     /// Remove logicamente um endereço pelo seu identificador TSID.
     async fn delete(&self, id: TSID, updated_by: &str) -> Result<(), BusinessError>;
+
+    async fn save_in_tx(
+        &self,
+        _tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        address: &Address,
+    ) -> Result<Address, BusinessError> {
+        self.save(address).await
+    }
 }
 
 /// Implementação em memória do repositório de `Address`, ideal para testes unitários e de integração.
@@ -96,9 +104,9 @@ impl AddressRepository for InMemoryAddressRepository {
 
     async fn find_by_id(&self, id: TSID) -> Result<Address, BusinessError> {
         let map = self.items.read().unwrap();
-        map.get(&id)
-            .cloned()
-            .ok_or_else(|| BusinessError::not_found(format!("Endereço não encontrado para o ID: {id}")))
+        map.get(&id).cloned().ok_or_else(|| {
+            BusinessError::not_found(format!("Endereço não encontrado para o ID: {id}"))
+        })
     }
 
     async fn delete(&self, id: TSID, _updated_by: &str) -> Result<(), BusinessError> {
@@ -156,10 +164,7 @@ impl PostgresAddressRepository {
         Self::execute_delete(&mut **tx, id, updated_by).await
     }
 
-    async fn execute_save<'e, E>(
-        executor: E,
-        address: &Address,
-    ) -> Result<Address, BusinessError>
+    async fn execute_save<'e, E>(executor: E, address: &Address) -> Result<Address, BusinessError>
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>,
     {
@@ -380,7 +385,10 @@ impl PostgresAddressRepository {
             .execute(executor)
             .await
             .map_err(|err| {
-                error!("Erro ao remover logicamente endereço com ID {}: {:?}", id, err);
+                error!(
+                    "Erro ao remover logicamente endereço com ID {}: {:?}",
+                    id, err
+                );
                 BusinessError::internal(format!("Falha ao remover endereço: {err}"))
             })?;
 
@@ -420,6 +428,14 @@ impl AddressRepository for PostgresAddressRepository {
 
     async fn delete(&self, id: TSID, updated_by: &str) -> Result<(), BusinessError> {
         Self::execute_delete(&self.pool, id, updated_by).await
+    }
+
+    async fn save_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        address: &Address,
+    ) -> Result<Address, BusinessError> {
+        Self::save_with_tx(tx, address).await
     }
 }
 

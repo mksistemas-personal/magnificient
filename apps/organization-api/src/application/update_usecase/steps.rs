@@ -69,6 +69,7 @@ pub trait LoadOrganizationContext {
     async fn load(
         self,
         repository: &dyn OrganizationRepository,
+        uow: Option<&UnitOfWork>,
     ) -> Result<Context<Loaded, LoadedContextData>, BusinessError>;
 }
 
@@ -77,9 +78,19 @@ impl LoadOrganizationContext for Context<AddressValidated, AddressValidatedConte
     async fn load(
         self,
         repository: &dyn OrganizationRepository,
+        uow: Option<&UnitOfWork>,
     ) -> Result<Context<Loaded, LoadedContextData>, BusinessError> {
         let org_id = self.data.request.organization_id;
-        let organization = repository.find_by_id(*org_id).await?;
+        let organization = match uow {
+            Some(uow) => {
+                uow.run_tx(|mut tx| async move {
+                    let organization = repository.find_by_id_in_tx(&mut tx, *org_id).await?;
+                    Ok((organization, tx))
+                })
+                .await?
+            }
+            None => repository.find_by_id(*org_id).await?,
+        };
 
         Ok(Context::new(LoadedContextData {
             request: self.data.request,
@@ -145,16 +156,29 @@ impl PersistOrganizationContext for Context<Changed, ChangedContextData> {
     ) -> Result<Organization, BusinessError> {
         let organization = self.data.organization;
 
-        UnitOfWork::execute_maybe_tx(uow, || async {
-            let mut org = organization.clone();
-            if let (Some(address_repo), Some(address)) =
-                (address_repository, org.address().cloned())
-            {
-                let saved_address = address_repo.save(&address).await?;
-                org = org.with_address(saved_address);
+        match uow {
+            Some(uow) => {
+                uow.run_tx(|mut tx| async move {
+                    let mut org = organization.clone();
+                    if let (Some(address_repo), Some(address)) =
+                        (address_repository, org.address().cloned())
+                    {
+                        org = org.with_address(address_repo.save_in_tx(&mut tx, &address).await?);
+                    }
+                    let saved = repository.save_in_tx(&mut tx, &org).await?;
+                    Ok((saved, tx))
+                })
+                .await
             }
-            repository.save(&org).await
-        })
-        .await
+            None => {
+                let mut org = organization;
+                if let (Some(address_repo), Some(address)) =
+                    (address_repository, org.address().cloned())
+                {
+                    org = org.with_address(address_repo.save(&address).await?);
+                }
+                repository.save(&org).await
+            }
+        }
     }
 }

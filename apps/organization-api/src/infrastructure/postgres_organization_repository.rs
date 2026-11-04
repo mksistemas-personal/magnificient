@@ -3,7 +3,9 @@ use crate::domain::organization_repository::OrganizationRepository;
 use crate::errors::OrganizationBusinessErrors;
 use async_trait::async_trait;
 use database::DatabaseConnection;
-use shared::entities::{Address, AuditFields, BusinessError, Country, Document, DocumentType, TSID};
+use shared::entities::{
+    Address, AuditFields, BusinessError, Country, Document, DocumentType, TSID,
+};
 use shared::row_get_field;
 use shared::types::page::PageRequest;
 use sqlx::PgPool;
@@ -377,26 +379,22 @@ impl PostgresOrganizationRepository {
     }
 
     /// Executa a contagem de organizações que atendem ao filtro opcional por nome no PostgreSQL.
-    async fn execute_count<'e, E>(
-        executor: E,
-        name: Option<&str>,
-    ) -> Result<u64, BusinessError>
+    async fn execute_count<'e, E>(executor: E, name: Option<&str>) -> Result<u64, BusinessError>
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>,
     {
         let name_filter = name.map(|n| n.trim()).filter(|n| !n.is_empty());
         let count_res: Result<i64, _> = if let Some(filter) = name_filter {
             let pattern = format!("%{filter}%");
-            let query = "SELECT COUNT(*) FROM organizations WHERE deleted = FALSE AND name ILIKE $1";
+            let query =
+                "SELECT COUNT(*) FROM organizations WHERE deleted = FALSE AND name ILIKE $1";
             sqlx::query_scalar(query)
                 .bind(pattern)
                 .fetch_one(executor)
                 .await
         } else {
             let query = "SELECT COUNT(*) FROM organizations WHERE deleted = FALSE";
-            sqlx::query_scalar(query)
-                .fetch_one(executor)
-                .await
+            sqlx::query_scalar(query).fetch_one(executor).await
         };
 
         let total = count_res.map_err(|err| {
@@ -450,6 +448,44 @@ impl OrganizationRepository for PostgresOrganizationRepository {
 
     async fn count(&self, name: Option<&str>) -> Result<u64, BusinessError> {
         Self::execute_count(&self.pool, name).await
+    }
+
+    async fn save_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        value: &Organization,
+    ) -> Result<Organization, BusinessError> {
+        Self::save_with_tx(tx, value).await
+    }
+    async fn find_by_id_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: TSID,
+    ) -> Result<Organization, BusinessError> {
+        Self::find_by_id_with_tx(tx, id).await
+    }
+    async fn delete_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: TSID,
+        updated_by: &str,
+    ) -> Result<(), BusinessError> {
+        Self::delete_with_tx(tx, id, updated_by).await
+    }
+    async fn find_all_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        name: Option<&str>,
+        page: &PageRequest,
+    ) -> Result<Vec<Organization>, BusinessError> {
+        Self::find_all_with_tx(tx, name, page).await
+    }
+    async fn count_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        name: Option<&str>,
+    ) -> Result<u64, BusinessError> {
+        Self::count_with_tx(tx, name).await
     }
 }
 

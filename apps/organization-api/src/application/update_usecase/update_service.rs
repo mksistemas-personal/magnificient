@@ -84,7 +84,7 @@ impl AsyncUpdateEntityUseCase<UpdateOrganizationRequest, Organization>
         Context::<Initial, _>::new(InitialContextData { request })
             .validate()?
             .validate_address()?
-            .load(self.repository.as_ref())
+            .load(self.repository.as_ref(), self.uow.as_ref())
             .await?
             .change()?
             .save(

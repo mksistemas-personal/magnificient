@@ -44,9 +44,17 @@ impl DeleteOrganizationContext for Context<Validated, ValidatedContextData> {
     ) -> Result<(), BusinessError> {
         let org_id = self.data.request.organization_id;
         let updated_by = self.data.request.updated_by;
-        UnitOfWork::execute_maybe_tx(uow, || async {
-            repository.delete(*org_id, &updated_by).await
-        })
-        .await
+        match uow {
+            Some(uow) => uow
+                .run_tx(|mut tx| async move {
+                    repository
+                        .delete_in_tx(&mut tx, *org_id, &updated_by)
+                        .await?;
+                    Ok(((), tx))
+                })
+                .await
+                .map(|_| ()),
+            None => repository.delete(*org_id, &updated_by).await,
+        }
     }
 }

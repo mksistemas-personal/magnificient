@@ -1,6 +1,7 @@
 use crate::config::DatabaseConnectionConfig;
 use crate::error::DatabaseError;
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use std::future::Future;
 use std::ops::Deref;
 use tracing::info;
 
@@ -31,7 +32,9 @@ impl DatabaseConnection {
     }
 
     /// Inicializa e conecta ao banco de dados com base nas configurações detalhadas (`DatabaseConnectionConfig`).
-    pub async fn connect_with_config(config: &DatabaseConnectionConfig) -> Result<Self, DatabaseError> {
+    pub async fn connect_with_config(
+        config: &DatabaseConnectionConfig,
+    ) -> Result<Self, DatabaseError> {
         info!(
             "Conectando ao banco de dados PostgreSQL em {}:{}/{}...",
             config.host, config.port, config.name
@@ -59,9 +62,7 @@ impl DatabaseConnection {
     /// Cria o pool de conexão de forma preguiçosa (lazy) com base em `DatabaseConnectionConfig`.
     pub fn connect_lazy_with_config(config: &DatabaseConnectionConfig) -> Self {
         let connect_options = config.to_connect_options();
-        let pool = config
-            .to_pool_options()
-            .connect_lazy_with(connect_options);
+        let pool = config.to_pool_options().connect_lazy_with(connect_options);
         Self { pool }
     }
 
@@ -100,10 +101,18 @@ impl DatabaseConnection {
     }
 
     /// Executa uma operação assíncrona dentro de um bloco transacional atômico gerenciado por `UnitOfWork`.
-    pub async fn run_tx<F, Fut, T>(&self, operation: F) -> Result<T, shared::entities::BusinessError>
+    pub async fn run_tx<F, Fut, T>(
+        &self,
+        operation: F,
+    ) -> Result<T, shared::entities::BusinessError>
     where
-        F: FnOnce(&mut sqlx::Transaction<'static, sqlx::Postgres>) -> Fut,
-        Fut: std::future::Future<Output = Result<T, shared::entities::BusinessError>>,
+        F: FnOnce(sqlx::Transaction<'static, sqlx::Postgres>) -> Fut,
+        Fut: Future<
+            Output = Result<
+                (T, sqlx::Transaction<'static, sqlx::Postgres>),
+                shared::entities::BusinessError,
+            >,
+        >,
     {
         self.unit_of_work().run_tx(operation).await
     }

@@ -16,6 +16,83 @@ use messaging::{MessageHeaders, MessagePublisher};
 use shared::errors::api_error::ApiError;
 use tsid::TSID;
 
+/// Resolves the tenant in the control schema before constructing tenant-scoped services.
+async fn scoped_state(state: &AppState, tenant: &str) -> Result<AppState, ApiError> {
+    let tenant_valid = !tenant.is_empty()
+        && tenant.len() <= 56
+        && tenant.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && tenant.ends_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && tenant
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        && !tenant.contains("--");
+    if !tenant_valid {
+        return Err(ApiError::BadRequest(
+            "Identificador de tenant inválido".into(),
+        ));
+    }
+    let schema: Option<String> = sqlx::query_scalar(
+        "SELECT schema_name FROM public.tenants WHERE slug = $1 AND active = TRUE",
+    )
+    .bind(tenant)
+    .fetch_optional(state.db.pool())
+    .await
+    .map_err(|err| ApiError::Internal(format!("Falha ao resolver tenant: {err}")))?;
+    let schema = schema.ok_or_else(|| ApiError::NotFound("Tenant não encontrado".into()))?;
+    state
+        .for_tenant_schema(&schema, tenant)
+        .map_err(ApiError::from)
+}
+
+pub async fn create_organization_for_tenant(
+    State(state): State<AppState>,
+    Path(tenant): Path<String>,
+    Json(payload): Json<CreateOrganizationDto>,
+) -> Result<impl IntoResponse, ApiError> {
+    create_organization(State(scoped_state(&state, &tenant).await?), Json(payload)).await
+}
+
+pub async fn update_organization_for_tenant(
+    State(state): State<AppState>,
+    Path((tenant, id)): Path<(String, TSID)>,
+    Json(payload): Json<UpdateOrganizationDto>,
+) -> Result<impl IntoResponse, ApiError> {
+    update_organization(
+        State(scoped_state(&state, &tenant).await?),
+        Path(id),
+        Json(payload),
+    )
+    .await
+}
+
+pub async fn delete_organization_for_tenant(
+    State(state): State<AppState>,
+    Path((tenant, id)): Path<(String, TSID)>,
+    Query(params): Query<DeleteOrganizationParams>,
+) -> Result<impl IntoResponse, ApiError> {
+    delete_organization(
+        State(scoped_state(&state, &tenant).await?),
+        Path(id),
+        Query(params),
+    )
+    .await
+}
+
+pub async fn get_by_id_organization_for_tenant(
+    State(state): State<AppState>,
+    Path((tenant, id)): Path<(String, TSID)>,
+) -> Result<impl IntoResponse, ApiError> {
+    get_by_id_organization(State(scoped_state(&state, &tenant).await?), Path(id)).await
+}
+
+pub async fn get_all_organizations_for_tenant(
+    State(state): State<AppState>,
+    Path(tenant): Path<String>,
+    Query(params): Query<FindAllOrganizationsParams>,
+) -> Result<impl IntoResponse, ApiError> {
+    get_all_organizations(State(scoped_state(&state, &tenant).await?), Query(params)).await
+}
+
 const ORGANIZATION_EXCHANGE_NAME: &str = "organization.output";
 const ROUTING_KEY: &str = "*";
 
@@ -73,6 +150,7 @@ async fn publish_message(state: AppState, event: &OrganizationEvent) -> Result<(
                     EVENT_TYPE,
                     EVENT_SOURCE,
                     EVENT_VERSION,
+                    state.tenant.as_str(),
                 )),
             )
             .await?;

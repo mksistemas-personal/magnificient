@@ -1,6 +1,8 @@
-use crate::application::OrganizationBusinessErrors;
-use crate::application::by_id_usecase::data::*;
-use crate::application::by_id_usecase::states::*;
+use crate::application::by_id_usecase::data::{FindOrganizationByIdRequest, InitialContextData};
+use crate::application::by_id_usecase::states::Initial;
+use crate::application::by_id_usecase::steps::{
+    FindOrganizationByIdContext, ValidateInitialContext,
+};
 use crate::domain::{Organization, OrganizationRepository};
 use async_trait::async_trait;
 use database::UnitOfWork;
@@ -8,39 +10,6 @@ use shared::entities::BusinessError;
 use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncGetByIdUseCase;
 use std::sync::Arc;
-
-trait ValidateInitialContext {
-    fn validate(self) -> Result<Context<Validated, ValidatedContextData>, BusinessError>;
-}
-
-impl ValidateInitialContext for Context<Initial, InitialContextData> {
-    fn validate(self) -> Result<Context<Validated, ValidatedContextData>, BusinessError> {
-        let request = self.data.request;
-
-        if !request.organization_id.is_valid() {
-            return Err(OrganizationBusinessErrors::id_invalid());
-        }
-
-        Ok(Context::new(ValidatedContextData { request }))
-    }
-}
-
-trait FindOrganizationByIdContext {
-    async fn find(
-        self,
-        repository: &dyn OrganizationRepository,
-    ) -> Result<Organization, BusinessError>;
-}
-
-impl FindOrganizationByIdContext for Context<Validated, ValidatedContextData> {
-    async fn find(
-        self,
-        repository: &dyn OrganizationRepository,
-    ) -> Result<Organization, BusinessError> {
-        let org_id = self.data.request.organization_id;
-        repository.find_by_id(*org_id).await
-    }
-}
 
 #[derive(Clone)]
 pub struct FindOrganizationByIdService {
@@ -66,23 +35,6 @@ impl FindOrganizationByIdService {
         }
     }
 
-    pub fn new_with_arc(repository: Arc<dyn OrganizationRepository>) -> Self {
-        Self {
-            repository,
-            uow: None,
-        }
-    }
-
-    pub fn new_with_arc_and_uow(
-        repository: Arc<dyn OrganizationRepository>,
-        uow: UnitOfWork,
-    ) -> Self {
-        Self {
-            repository,
-            uow: Some(uow),
-        }
-    }
-
     pub fn with_uow(mut self, uow: UnitOfWork) -> Self {
         self.uow = Some(uow);
         self
@@ -97,13 +49,6 @@ impl FindOrganizationByIdService {
         )
         .await
     }
-
-    async fn execute_pipeline(
-        validated: Context<Validated, ValidatedContextData>,
-        repo: &dyn OrganizationRepository,
-    ) -> Result<Organization, BusinessError> {
-        validated.find(repo).await
-    }
 }
 
 pub type GetOrganizationByIdService = FindOrganizationByIdService;
@@ -116,14 +61,17 @@ impl AsyncGetByIdUseCase<FindOrganizationByIdRequest, Organization>
         &self,
         request: FindOrganizationByIdRequest,
     ) -> Result<Organization, BusinessError> {
-        let validated = Context::<Initial, _>::new(InitialContextData { request }).validate()?;
-        Self::execute_pipeline(validated, self.repository.as_ref()).await
+        Context::<Initial, _>::new(InitialContextData { request })
+            .validate()?
+            .find(self.repository.as_ref(), self.uow.as_ref())
+            .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::OrganizationBusinessErrors;
     use crate::domain::{Organization, OrganizationId};
     use crate::infrastructure::InMemoryOrganizationRepository;
     use shared::entities::{AuditFields, Document, DocumentType, TSID};

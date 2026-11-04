@@ -1,8 +1,8 @@
 use crate::application::{
     AddOrganizationRequest, AddOrganizationService, DeleteOrganizationRequest,
     DeleteOrganizationService, FindAllOrganizationsRequest, FindAllOrganizationsService,
-    FindOrganizationByIdRequest, GetOrganizationByIdRequest, GetOrganizationByIdService,
-    UpdateOrganizationRequest, UpdateOrganizationService,
+    FindOrganizationByIdRequest, GetOrganizationByIdService, UpdateOrganizationRequest,
+    UpdateOrganizationService,
 };
 use crate::config::organization_config::OrganizationAppConfig;
 use crate::domain::organization::Organization;
@@ -22,6 +22,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<OrganizationAppConfig>,
+    pub tenant: String,
     pub db: DatabaseConnection,
     pub message_publisher: Option<Arc<RabbitMqPublisher>>,
     pub address_repository: Option<Arc<dyn AddressRepository>>,
@@ -38,12 +39,61 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Creates request-scoped repositories and a UnitOfWork pinned to a tenant schema.
+    /// Schema names must come from a trusted tenant registry, not directly from user input.
+    pub fn for_tenant_schema(
+        &self,
+        schema: &str,
+        tenant: &str,
+    ) -> Result<Self, shared::entities::BusinessError> {
+        let uow = self
+            .db
+            .unit_of_work()
+            .with_schema(schema.to_owned())
+            .map_err(|e| shared::entities::BusinessError::invalid_data(e.to_string()))?;
+        let repository = PostgresOrganizationRepository::new(self.db.pool().clone());
+        let address_repository = PostgresAddressRepository::new(self.db.pool().clone());
+        Ok(Self {
+            config: self.config.clone(),
+            tenant: tenant.to_owned(),
+            db: self.db.clone(),
+            message_publisher: self.message_publisher.clone(),
+            address_repository: Some(Arc::new(address_repository.clone())),
+            add_organization_use_case: Arc::new(
+                AddOrganizationService::new_with_repositories_and_uow(
+                    repository.clone(),
+                    address_repository.clone(),
+                    uow.clone(),
+                ),
+            ),
+            update_organization_use_case: Arc::new(
+                UpdateOrganizationService::new_with_repositories_and_uow(
+                    repository.clone(),
+                    address_repository,
+                    uow.clone(),
+                ),
+            ),
+            delete_organization_use_case: Arc::new(DeleteOrganizationService::new_with_uow(
+                repository.clone(),
+                uow.clone(),
+            )),
+            get_by_id_organization_use_case: Arc::new(GetOrganizationByIdService::new_with_uow(
+                repository.clone(),
+                uow.clone(),
+            )),
+            get_all_organization_use_case: Arc::new(FindAllOrganizationsService::new_with_uow(
+                repository, uow,
+            )),
+        })
+    }
+
     pub fn new(config: Arc<OrganizationAppConfig>, db: DatabaseConnection) -> Self {
         let repository = PostgresOrganizationRepository::new(db.pool().clone());
         let address_repository = PostgresAddressRepository::new(db.pool().clone());
         let uow = db.unit_of_work();
         Self {
             config,
+            tenant: String::new(),
             db,
             message_publisher: None,
             address_repository: Some(Arc::new(address_repository.clone())),
@@ -97,6 +147,7 @@ impl AppState {
     ) -> Self {
         Self {
             config,
+            tenant: String::new(),
             db,
             message_publisher: None,
             address_repository: None,
@@ -122,6 +173,7 @@ impl AppState {
     ) -> Self {
         Self {
             config,
+            tenant: String::new(),
             db,
             message_publisher: None,
             address_repository: Some(Arc::new(address_repository.clone())),
@@ -142,30 +194,6 @@ impl AppState {
                 repository.clone(),
             )),
             get_all_organization_use_case: Arc::new(FindAllOrganizationsService::new(repository)),
-        }
-    }
-
-    pub fn new_with_use_case(
-        config: Arc<OrganizationAppConfig>,
-        db: DatabaseConnection,
-        add_use_case: Arc<dyn AsyncAddEntityUseCase<AddOrganizationRequest, Organization>>,
-        update_use_case: Arc<dyn AsyncUpdateEntityUseCase<UpdateOrganizationRequest, Organization>>,
-        delete_use_case: Arc<dyn AsyncDeleteEntityUseCase<DeleteOrganizationRequest, ()>>,
-        get_by_id_use_case: Arc<dyn AsyncGetByIdUseCase<GetOrganizationByIdRequest, Organization>>,
-        get_all_use_case: Arc<
-            dyn AsyncGetAllUseCase<FindAllOrganizationsRequest, Page<Organization>>,
-        >,
-    ) -> Self {
-        Self {
-            config,
-            db,
-            message_publisher: None,
-            address_repository: None,
-            add_organization_use_case: add_use_case,
-            update_organization_use_case: update_use_case,
-            delete_organization_use_case: delete_use_case,
-            get_by_id_organization_use_case: get_by_id_use_case,
-            get_all_organization_use_case: get_all_use_case,
         }
     }
 
@@ -237,7 +265,22 @@ mod tests {
         let state = AppState::new_with_repository(Arc::clone(&config), db, repo);
 
         assert_eq!(state.config().server.port, 8080);
+        assert!(state.tenant.is_empty());
         assert!(state.message_publisher().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_app_state_for_tenant_schema_keeps_tenant_slug() {
+        let config = create_test_config();
+        let db =
+            DatabaseConnection::connect_lazy_with_config(&config.database.to_connection_config());
+        let state = AppState::new(Arc::clone(&config), db);
+
+        let tenant_state = state
+            .for_tenant_schema("tenant_schema", "tenant-slug")
+            .unwrap();
+
+        assert_eq!(tenant_state.tenant, "tenant-slug");
     }
 
     #[tokio::test]

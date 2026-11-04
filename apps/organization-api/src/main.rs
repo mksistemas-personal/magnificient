@@ -1,4 +1,4 @@
-use database::DatabaseConnection;
+use database::{DatabaseConnection, provision_tenant_schema};
 use messaging::{RabbitMqPublisher, create_rabbitmq_client};
 use organizacao_api::api::{AppState, create_router};
 use organizacao_api::config::organization_config::OrganizationAppConfig;
@@ -25,8 +25,23 @@ async fn setup_database(
     let db =
         DatabaseConnection::connect_with_config(&config.database.to_connection_config()).await?;
     info!("Executing database migrations...");
-    sqlx::migrate!("./migrations").run(db.pool()).await?;
-    info!("Migrations run successfully.");
+    let migrator = sqlx::migrate!("./migrations");
+    migrator.run(db.pool()).await?;
+    info!("Control schema migrations run successfully.");
+
+    let tenant_slugs: Vec<String> =
+        sqlx::query_scalar("SELECT slug FROM public.tenants ORDER BY slug")
+            .fetch_all(db.pool())
+            .await?;
+
+    for tenant_slug in tenant_slugs {
+        info!("Executing migrations for tenant '{}'...", tenant_slug);
+        provision_tenant_schema(db.pool(), &tenant_slug, &migrator)
+            .await
+            .map_err(|err| err as Box<dyn std::error::Error>)?;
+    }
+
+    info!("Tenant schema migrations run successfully.");
     Ok(db)
 }
 

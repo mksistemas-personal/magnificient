@@ -12,18 +12,46 @@ use tracing::{debug, error};
 #[derive(Debug, Clone)]
 pub struct UnitOfWork {
     pool: PgPool,
+    schema: Option<String>,
 }
 
 impl UnitOfWork {
     /// Cria uma nova instância de `UnitOfWork` a partir de um `PgPool`.
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self { pool, schema: None }
+    }
+
+    /// Returns a unit of work that sets a tenant schema for each transaction.
+    /// The schema is treated as an SQL identifier and validated before use.
+    pub fn with_schema(mut self, schema: impl Into<String>) -> Result<Self, DatabaseError> {
+        let schema = schema.into();
+        if schema.is_empty()
+            || schema.len() > 63
+            || !schema
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            || !schema
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return Err(DatabaseError::ConnectionError(sqlx::Error::Protocol(
+                "Invalid PostgreSQL schema identifier".into(),
+            )));
+        }
+        self.schema = Some(schema);
+        Ok(self)
+    }
+
+    pub fn tenant(&self) -> Option<&str> {
+        self.schema.as_deref()
     }
 
     /// Cria uma nova instância de `UnitOfWork` a partir de uma `DatabaseConnection`.
     pub fn from_connection(db: &DatabaseConnection) -> Self {
         Self {
             pool: db.pool().clone(),
+            schema: None,
         }
     }
 
@@ -46,8 +74,8 @@ impl UnitOfWork {
     /// Se a operação retornar `Err(E)` ou ocorrer cancelamento, a transação é revertida (`rollback`).
     pub async fn run_tx<F, Fut, T>(&self, operation: F) -> Result<T, BusinessError>
     where
-        F: FnOnce(&mut Transaction<'static, Postgres>) -> Fut,
-        Fut: Future<Output = Result<T, BusinessError>>,
+        F: FnOnce(Transaction<'static, Postgres>) -> Fut,
+        Fut: Future<Output = Result<(T, Transaction<'static, Postgres>), BusinessError>>,
     {
         debug!("Iniciando transação na Unidade de Trabalho (Unit of Work)...");
         let mut tx = self.pool.begin().await.map_err(|err| {
@@ -55,21 +83,57 @@ impl UnitOfWork {
             BusinessError::internal(format!("Falha ao abrir transação no banco de dados: {err}"))
         })?;
 
-        match operation(&mut tx).await {
-            Ok(result) => {
+        if let Some(schema) = &self.schema {
+            // set_config accepts a value parameter, avoiding SQL identifier interpolation.
+            let search_path = format!("\"{schema}\"");
+            if let Err(err) = sqlx::query("SELECT set_config('search_path', $1, true)")
+                .bind(search_path)
+                .execute(&mut *tx)
+                .await
+            {
+                let _ = tx.rollback().await;
+                return Err(BusinessError::internal(format!(
+                    "Falha ao selecionar schema do tenant: {err}"
+                )));
+            }
+            let schema_exists: bool = match sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1)",
+            )
+            .bind(schema)
+            .fetch_one(&mut *tx)
+            .await
+            {
+                Ok(value) => value,
+                Err(err) => {
+                    let _ = tx.rollback().await;
+                    return Err(BusinessError::internal(format!(
+                        "Falha ao validar schema do tenant: {err}"
+                    )));
+                }
+            };
+            if !schema_exists {
+                let _ = tx.rollback().await;
+                return Err(BusinessError::not_found(format!(
+                    "Schema do tenant '{schema}' não encontrado"
+                )));
+            }
+        }
+
+        match operation(tx).await {
+            Ok((result, tx)) => {
                 debug!("Confirmando (commit) transação da Unidade de Trabalho...");
                 tx.commit().await.map_err(|err| {
                     error!("Falha ao confirmar (commit) transação: {:?}", err);
-                    BusinessError::internal(format!("Falha ao confirmar transação no banco de dados: {err}"))
+                    BusinessError::internal(format!(
+                        "Falha ao confirmar transação no banco de dados: {err}"
+                    ))
                 })?;
                 debug!("Transação confirmada com sucesso.");
                 Ok(result)
             }
             Err(err) => {
+                // `Transaction` rolls back on drop when the operation fails.
                 debug!("Revertendo (rollback) transação devido a erro: {:?}", err);
-                if let Err(rollback_err) = tx.rollback().await {
-                    error!("Erro adicional ao reverter transação: {:?}", rollback_err);
-                }
                 Err(err)
             }
         }
@@ -85,10 +149,13 @@ impl UnitOfWork {
     ) -> Result<T, BusinessError>
     where
         F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<T, BusinessError>>,
+        Fut: Future<Output = Result<T, BusinessError>> + 'static,
     {
         match uow {
-            Some(u) => u.run_tx(|_tx| operation()).await,
+            Some(u) => {
+                u.run_tx(|tx| async move { Ok((operation().await?, tx)) })
+                    .await
+            }
             None => operation().await,
         }
     }

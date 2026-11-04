@@ -36,11 +36,25 @@ impl FindOrganizationsContext for Context<Validated, ValidatedContextData> {
     ) -> Result<Page<Organization>, BusinessError> {
         let name_filter = self.data.request.name.as_deref();
         let page_req = self.data.request.page_request;
-        UnitOfWork::execute_maybe_tx(uow, || async {
-            let content = repository.find_all(name_filter, &page_req).await?;
-            let total = repository.count(name_filter).await?;
-            Ok(Page::new(content, page_req.page, page_req.page_size, total))
-        })
-        .await
+        match uow {
+            Some(uow) => {
+                uow.run_tx(|mut tx| async move {
+                    let content = repository
+                        .find_all_in_tx(&mut tx, name_filter, &page_req)
+                        .await?;
+                    let total = repository.count_in_tx(&mut tx, name_filter).await?;
+                    Ok((
+                        Page::new(content, page_req.page, page_req.page_size, total),
+                        tx,
+                    ))
+                })
+                .await
+            }
+            None => {
+                let content = repository.find_all(name_filter, &page_req).await?;
+                let total = repository.count(name_filter).await?;
+                Ok(Page::new(content, page_req.page, page_req.page_size, total))
+            }
+        }
     }
 }

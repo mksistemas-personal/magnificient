@@ -1,7 +1,6 @@
 use crate::config::DatabaseConnectionConfig;
 use crate::error::DatabaseError;
 use sqlx::postgres::{PgPool, PgPoolOptions};
-use std::future::Future;
 use std::ops::Deref;
 use tracing::info;
 
@@ -98,23 +97,6 @@ impl DatabaseConnection {
     /// Retorna uma instância de `UnitOfWork` associada a esta conexão para orquestração de transações.
     pub fn unit_of_work(&self) -> crate::unit_of_work::UnitOfWork {
         crate::unit_of_work::UnitOfWork::from_connection(self)
-    }
-
-    /// Executa uma operação assíncrona dentro de um bloco transacional atômico gerenciado por `UnitOfWork`.
-    pub async fn run_tx<F, Fut, T>(
-        &self,
-        operation: F,
-    ) -> Result<T, shared::entities::BusinessError>
-    where
-        F: FnOnce(sqlx::Transaction<'static, sqlx::Postgres>) -> Fut,
-        Fut: Future<
-            Output = Result<
-                (T, sqlx::Transaction<'static, sqlx::Postgres>),
-                shared::entities::BusinessError,
-            >,
-        >,
-    {
-        self.unit_of_work().run_tx(operation).await
     }
 }
 

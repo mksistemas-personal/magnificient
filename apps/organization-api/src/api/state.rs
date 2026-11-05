@@ -1,8 +1,8 @@
 use crate::application::{
     AddOrganizationRequest, AddOrganizationService, DeleteOrganizationRequest,
     DeleteOrganizationService, FindAllOrganizationsRequest, FindAllOrganizationsService,
-    FindOrganizationByIdRequest, GetOrganizationByIdService, UpdateOrganizationRequest,
-    UpdateOrganizationService,
+    FindOrganizationByIdRequest, GetOrganizationByIdService, OrganizationPersistence,
+    UpdateOrganizationRequest, UpdateOrganizationService,
 };
 use crate::config::organization_config::OrganizationAppConfig;
 use crate::domain::organization::Organization;
@@ -53,76 +53,26 @@ impl AppState {
             .map_err(|e| shared::entities::BusinessError::invalid_data(e.to_string()))?;
         let repository = PostgresOrganizationRepository::new(self.db.pool().clone());
         let address_repository = PostgresAddressRepository::new(self.db.pool().clone());
-        Ok(Self {
-            config: self.config.clone(),
-            tenant: tenant.to_owned(),
-            db: self.db.clone(),
-            message_publisher: self.message_publisher.clone(),
-            address_repository: Some(Arc::new(address_repository.clone())),
-            add_organization_use_case: Arc::new(
-                AddOrganizationService::new_with_repositories_and_uow(
-                    repository.clone(),
-                    address_repository.clone(),
-                    uow.clone(),
-                ),
-            ),
-            update_organization_use_case: Arc::new(
-                UpdateOrganizationService::new_with_repositories_and_uow(
-                    repository.clone(),
-                    address_repository,
-                    uow.clone(),
-                ),
-            ),
-            delete_organization_use_case: Arc::new(DeleteOrganizationService::new_with_uow(
-                repository.clone(),
-                uow.clone(),
-            )),
-            get_by_id_organization_use_case: Arc::new(GetOrganizationByIdService::new_with_uow(
-                repository.clone(),
-                uow.clone(),
-            )),
-            get_all_organization_use_case: Arc::new(FindAllOrganizationsService::new_with_uow(
-                repository, uow,
-            )),
-        })
+        let persistence = OrganizationPersistence::new(repository)
+            .with_address_repository(address_repository)
+            .with_unit_of_work(uow);
+        Ok(Self::from_persistence(
+            self.config.clone(),
+            self.db.clone(),
+            tenant.to_owned(),
+            self.message_publisher.clone(),
+            persistence,
+        ))
     }
 
     pub fn new(config: Arc<OrganizationAppConfig>, db: DatabaseConnection) -> Self {
         let repository = PostgresOrganizationRepository::new(db.pool().clone());
         let address_repository = PostgresAddressRepository::new(db.pool().clone());
         let uow = db.unit_of_work();
-        Self {
-            config,
-            tenant: String::new(),
-            db,
-            message_publisher: None,
-            address_repository: Some(Arc::new(address_repository.clone())),
-            add_organization_use_case: Arc::new(
-                AddOrganizationService::new_with_repositories_and_uow(
-                    repository.clone(),
-                    address_repository.clone(),
-                    uow.clone(),
-                ),
-            ),
-            update_organization_use_case: Arc::new(
-                UpdateOrganizationService::new_with_repositories_and_uow(
-                    repository.clone(),
-                    address_repository,
-                    uow.clone(),
-                ),
-            ),
-            delete_organization_use_case: Arc::new(DeleteOrganizationService::new_with_uow(
-                repository.clone(),
-                uow.clone(),
-            )),
-            get_by_id_organization_use_case: Arc::new(GetOrganizationByIdService::new_with_uow(
-                repository.clone(),
-                uow.clone(),
-            )),
-            get_all_organization_use_case: Arc::new(FindAllOrganizationsService::new_with_uow(
-                repository, uow,
-            )),
-        }
+        let persistence = OrganizationPersistence::new(repository)
+            .with_address_repository(address_repository)
+            .with_unit_of_work(uow);
+        Self::from_persistence(config, db, String::new(), None, persistence)
     }
 
     pub fn new_with_publisher(
@@ -143,57 +93,56 @@ impl AppState {
     pub fn new_with_repository(
         config: Arc<OrganizationAppConfig>,
         db: DatabaseConnection,
-        repository: impl OrganizationRepository + Clone + 'static,
+        repository: impl OrganizationRepository + 'static,
     ) -> Self {
-        Self {
+        Self::from_persistence(
             config,
-            tenant: String::new(),
             db,
-            message_publisher: None,
-            address_repository: None,
-            add_organization_use_case: Arc::new(AddOrganizationService::new(repository.clone())),
-            update_organization_use_case: Arc::new(UpdateOrganizationService::new(
-                repository.clone(),
-            )),
-            delete_organization_use_case: Arc::new(DeleteOrganizationService::new(
-                repository.clone(),
-            )),
-            get_by_id_organization_use_case: Arc::new(GetOrganizationByIdService::new(
-                repository.clone(),
-            )),
-            get_all_organization_use_case: Arc::new(FindAllOrganizationsService::new(repository)),
-        }
+            String::new(),
+            None,
+            OrganizationPersistence::new(repository),
+        )
     }
 
     pub fn new_with_repositories(
         config: Arc<OrganizationAppConfig>,
         db: DatabaseConnection,
-        repository: impl OrganizationRepository + Clone + 'static,
-        address_repository: impl AddressRepository + Clone + 'static,
+        repository: impl OrganizationRepository + 'static,
+        address_repository: impl AddressRepository + 'static,
+    ) -> Self {
+        let persistence =
+            OrganizationPersistence::new(repository).with_address_repository(address_repository);
+        Self::from_persistence(config, db, String::new(), None, persistence)
+    }
+
+    fn from_persistence(
+        config: Arc<OrganizationAppConfig>,
+        db: DatabaseConnection,
+        tenant: String,
+        message_publisher: Option<Arc<RabbitMqPublisher>>,
+        persistence: OrganizationPersistence,
     ) -> Self {
         Self {
             config,
-            tenant: String::new(),
+            tenant,
             db,
-            message_publisher: None,
-            address_repository: Some(Arc::new(address_repository.clone())),
-            add_organization_use_case: Arc::new(AddOrganizationService::new_with_repositories(
-                repository.clone(),
-                address_repository.clone(),
+            message_publisher,
+            address_repository: persistence.address_repository.clone(),
+            add_organization_use_case: Arc::new(AddOrganizationService::with_persistence(
+                persistence.clone(),
             )),
-            update_organization_use_case: Arc::new(
-                UpdateOrganizationService::new_with_repositories(
-                    repository.clone(),
-                    address_repository,
-                ),
+            update_organization_use_case: Arc::new(UpdateOrganizationService::with_persistence(
+                persistence.clone(),
+            )),
+            delete_organization_use_case: Arc::new(DeleteOrganizationService::with_persistence(
+                persistence.clone(),
+            )),
+            get_by_id_organization_use_case: Arc::new(
+                GetOrganizationByIdService::with_persistence(persistence.clone()),
             ),
-            delete_organization_use_case: Arc::new(DeleteOrganizationService::new(
-                repository.clone(),
+            get_all_organization_use_case: Arc::new(FindAllOrganizationsService::with_persistence(
+                persistence,
             )),
-            get_by_id_organization_use_case: Arc::new(GetOrganizationByIdService::new(
-                repository.clone(),
-            )),
-            get_all_organization_use_case: Arc::new(FindAllOrganizationsService::new(repository)),
         }
     }
 

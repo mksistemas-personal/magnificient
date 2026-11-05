@@ -26,42 +26,32 @@ pub trait OrganizationRepository: Send + Sync {
     /// Retorna a quantidade total de organizações que atendem ao filtro opcional por nome.
     async fn count(&self, name: Option<&str>) -> Result<u64, BusinessError>;
 
-    // Transaction-aware variants keep tenant search_path and all writes in the same transaction.
+    // Implementations must explicitly state how transaction-aware operations behave.
     async fn save_in_tx(
         &self,
         _tx: &mut Transaction<'_, Postgres>,
         value: &Organization,
-    ) -> Result<Organization, BusinessError> {
-        self.save(value).await
-    }
+    ) -> Result<Organization, BusinessError>;
     async fn find_by_id_in_tx(
         &self,
         _tx: &mut Transaction<'_, Postgres>,
         id: TSID,
-    ) -> Result<Organization, BusinessError> {
-        self.find_by_id(id).await
-    }
+    ) -> Result<Organization, BusinessError>;
     async fn delete_in_tx(
         &self,
         _tx: &mut Transaction<'_, Postgres>,
         id: TSID,
         updated_by: &str,
-    ) -> Result<(), BusinessError> {
-        self.delete(id, updated_by).await
-    }
+    ) -> Result<(), BusinessError>;
     async fn find_all_in_tx(
         &self,
         _tx: &mut Transaction<'_, Postgres>,
         name: Option<&str>,
         page: &PageRequest,
-    ) -> Result<Vec<Organization>, BusinessError> {
-        self.find_all(name, page).await
-    }
+    ) -> Result<Vec<Organization>, BusinessError>;
     async fn count_in_tx(
         &self,
         _tx: &mut Transaction<'_, Postgres>,
         name: Option<&str>,
-    ) -> Result<u64, BusinessError> {
-        self.count(name).await
-    }
+    ) -> Result<u64, BusinessError>;
 }

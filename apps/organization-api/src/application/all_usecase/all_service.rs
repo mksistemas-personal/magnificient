@@ -1,3 +1,4 @@
+use crate::application::OrganizationPersistence;
 use crate::application::all_usecase::data::*;
 use crate::application::all_usecase::states::*;
 use crate::application::all_usecase::steps::{FindOrganizationsContext, ValidateInitialContext};
@@ -8,30 +9,26 @@ use shared::entities::BusinessError;
 use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncGetAllUseCase;
 use shared::types::page::Page;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct FindAllOrganizationsService {
-    repository: Arc<dyn OrganizationRepository>,
-    uow: Option<UnitOfWork>,
+    persistence: OrganizationPersistence,
 }
 
 impl FindAllOrganizationsService {
     pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            uow: None,
-        }
+        Self::with_persistence(OrganizationPersistence::new(repository))
+    }
+
+    pub fn with_persistence(persistence: OrganizationPersistence) -> Self {
+        Self { persistence }
     }
 
     pub fn new_with_uow(
         repository: impl OrganizationRepository + 'static,
         uow: UnitOfWork,
     ) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            uow: Some(uow),
-        }
+        Self::with_persistence(OrganizationPersistence::new(repository).with_unit_of_work(uow))
     }
 
     pub async fn execute(
@@ -58,7 +55,7 @@ impl AsyncGetAllUseCase<FindAllOrganizationsRequest, Page<Organization>>
     ) -> Result<Page<Organization>, BusinessError> {
         Context::<Initial, _>::new(InitialContextData { request })
             .validate()?
-            .find(self.repository.as_ref(), self.uow.as_ref())
+            .find(&self.persistence)
             .await
     }
 }

@@ -3,12 +3,16 @@ use crate::error::DatabaseError;
 use shared::entities::BusinessError;
 use sqlx::{PgPool, Postgres, Transaction};
 use std::future::Future;
+use std::pin::Pin;
 use tracing::{debug, error};
+
+type TransactionOperationFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, BusinessError>> + Send + 'a>>;
 
 /// Gerenciador de Unidade de Trabalho (Unit of Work) para controle de transações no PostgreSQL via SQLx.
 ///
 /// Encapsula o ciclo de vida transacional (`begin`, `commit`, `rollback`) através de funções de
-/// ordem superior (`run_tx`), garantindo atomicidade e isolamento de falhas de forma idiomática e reutilizável.
+/// ordem superior (`transaction`), garantindo atomicidade e isolamento de falhas de forma idiomática e reutilizável.
 #[derive(Debug, Clone)]
 pub struct UnitOfWork {
     pool: PgPool,
@@ -60,22 +64,15 @@ impl UnitOfWork {
         &self.pool
     }
 
-    /// Inicia uma nova transação no PostgreSQL.
-    pub async fn begin(&self) -> Result<Transaction<'static, Postgres>, DatabaseError> {
-        self.pool
-            .begin()
-            .await
-            .map_err(DatabaseError::ConnectionError)
-    }
-
     /// Executa uma operação assíncrona dentro de um bloco transacional atômico.
     ///
     /// Se a operação retornar `Ok(T)`, a transação é automaticamente confirmada (`commit`).
     /// Se a operação retornar `Err(E)` ou ocorrer cancelamento, a transação é revertida (`rollback`).
-    pub async fn run_tx<F, Fut, T>(&self, operation: F) -> Result<T, BusinessError>
+    pub async fn transaction<F, T>(&self, operation: F) -> Result<T, BusinessError>
     where
-        F: FnOnce(Transaction<'static, Postgres>) -> Fut,
-        Fut: Future<Output = Result<(T, Transaction<'static, Postgres>), BusinessError>>,
+        F: for<'a> FnOnce(
+            &'a mut Transaction<'static, Postgres>,
+        ) -> TransactionOperationFuture<'a, T>,
     {
         debug!("Iniciando transação na Unidade de Trabalho (Unit of Work)...");
         let mut tx = self.pool.begin().await.map_err(|err| {
@@ -119,8 +116,8 @@ impl UnitOfWork {
             }
         }
 
-        match operation(tx).await {
-            Ok((result, tx)) => {
+        match operation(&mut tx).await {
+            Ok(result) => {
                 debug!("Confirmando (commit) transação da Unidade de Trabalho...");
                 tx.commit().await.map_err(|err| {
                     error!("Falha ao confirmar (commit) transação: {:?}", err);
@@ -136,27 +133,6 @@ impl UnitOfWork {
                 debug!("Revertendo (rollback) transação devido a erro: {:?}", err);
                 Err(err)
             }
-        }
-    }
-
-    /// Executa uma operação assíncrona gerenciando a transação de forma opcional.
-    ///
-    /// Se `uow` for `Some(&UnitOfWork)`, a operação é executada dentro de uma transação via `run_tx`.
-    /// Se `uow` for `None`, a operação é executada diretamente fora de uma transação.
-    pub async fn execute_maybe_tx<F, Fut, T>(
-        uow: Option<&UnitOfWork>,
-        operation: F,
-    ) -> Result<T, BusinessError>
-    where
-        F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<T, BusinessError>> + 'static,
-    {
-        match uow {
-            Some(u) => {
-                u.run_tx(|tx| async move { Ok((operation().await?, tx)) })
-                    .await
-            }
-            None => operation().await,
         }
     }
 }
@@ -197,13 +173,5 @@ mod tests {
 
         let uow_from_pool: UnitOfWork = db.pool().clone().into();
         assert!(!uow_from_pool.pool().is_closed());
-    }
-
-    #[tokio::test]
-    async fn test_unit_of_work_execute_maybe_tx_none() {
-        let result: Result<&str, BusinessError> =
-            UnitOfWork::execute_maybe_tx(None, || async { Ok("success_without_uow") }).await;
-
-        assert_eq!(result.unwrap(), "success_without_uow");
     }
 }

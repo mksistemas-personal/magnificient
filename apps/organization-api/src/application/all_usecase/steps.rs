@@ -1,8 +1,8 @@
+use crate::application::OrganizationPersistence;
 use crate::application::all_usecase::data::{InitialContextData, ValidatedContextData};
 use crate::application::all_usecase::states::{Initial, Validated};
-use crate::domain::{Organization, OrganizationRepository};
+use crate::domain::Organization;
 use async_trait::async_trait;
-use database::UnitOfWork;
 use shared::entities::BusinessError;
 use shared::entities::use_case::context::Context;
 use shared::types::Page;
@@ -22,8 +22,7 @@ impl ValidateInitialContext for Context<Initial, InitialContextData> {
 pub trait FindOrganizationsContext {
     async fn find(
         self,
-        repository: &dyn OrganizationRepository,
-        uow: Option<&UnitOfWork>,
+        persistence: &OrganizationPersistence,
     ) -> Result<Page<Organization>, BusinessError>;
 }
 
@@ -31,30 +30,13 @@ pub trait FindOrganizationsContext {
 impl FindOrganizationsContext for Context<Validated, ValidatedContextData> {
     async fn find(
         self,
-        repository: &dyn OrganizationRepository,
-        uow: Option<&UnitOfWork>,
+        persistence: &OrganizationPersistence,
     ) -> Result<Page<Organization>, BusinessError> {
-        let name_filter = self.data.request.name.as_deref();
-        let page_req = self.data.request.page_request;
-        match uow {
-            Some(uow) => {
-                uow.run_tx(|mut tx| async move {
-                    let content = repository
-                        .find_all_in_tx(&mut tx, name_filter, &page_req)
-                        .await?;
-                    let total = repository.count_in_tx(&mut tx, name_filter).await?;
-                    Ok((
-                        Page::new(content, page_req.page, page_req.page_size, total),
-                        tx,
-                    ))
-                })
-                .await
-            }
-            None => {
-                let content = repository.find_all(name_filter, &page_req).await?;
-                let total = repository.count(name_filter).await?;
-                Ok(Page::new(content, page_req.page, page_req.page_size, total))
-            }
-        }
+        persistence
+            .find_page(
+                self.data.request.name.as_deref(),
+                self.data.request.page_request,
+            )
+            .await
     }
 }

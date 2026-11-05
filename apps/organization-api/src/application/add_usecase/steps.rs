@@ -1,15 +1,15 @@
 use crate::application::OrganizationBusinessErrors;
+use crate::application::OrganizationPersistence;
 use crate::application::add_usecase::data::{
     AddressValidatedContextData, CreatedContextData, InitialContextData, ValidatedContextData,
 };
 use crate::application::add_usecase::states::{
     AddressValidated, Built, Initial, OrganizationValidated,
 };
-use crate::domain::{Organization, OrganizationId, OrganizationRepository};
+use crate::domain::{Organization, OrganizationId};
 use async_trait::async_trait;
-use database::UnitOfWork;
 use shared::entities::use_case::context::Context;
-use shared::entities::{AddressRepository, AuditFields, BusinessError, Document};
+use shared::entities::{AuditFields, BusinessError, Document};
 use tsid::create_tsid;
 
 pub trait ValidateInitialContext {
@@ -116,9 +116,7 @@ impl BuildOrganizationContext for Context<AddressValidated, AddressValidatedCont
 pub trait PersistOrganizationContext {
     async fn save(
         self,
-        repository: &dyn OrganizationRepository,
-        address_repository: Option<&dyn AddressRepository>,
-        uow: Option<&UnitOfWork>,
+        persistence: &OrganizationPersistence,
     ) -> Result<Organization, BusinessError>;
 }
 
@@ -126,35 +124,8 @@ pub trait PersistOrganizationContext {
 impl PersistOrganizationContext for Context<Built, CreatedContextData> {
     async fn save(
         self,
-        repository: &dyn OrganizationRepository,
-        address_repository: Option<&dyn AddressRepository>,
-        uow: Option<&UnitOfWork>,
+        persistence: &OrganizationPersistence,
     ) -> Result<Organization, BusinessError> {
-        let organization = self.data.organization;
-
-        match uow {
-            Some(uow) => {
-                uow.run_tx(|mut tx| async move {
-                    let mut org = organization.clone();
-                    if let (Some(address_repo), Some(address)) =
-                        (address_repository, org.address().cloned())
-                    {
-                        org = org.with_address(address_repo.save_in_tx(&mut tx, &address).await?);
-                    }
-                    let saved = repository.save_in_tx(&mut tx, &org).await?;
-                    Ok((saved, tx))
-                })
-                .await
-            }
-            None => {
-                let mut org = organization;
-                if let (Some(address_repo), Some(address)) =
-                    (address_repository, org.address().cloned())
-                {
-                    org = org.with_address(address_repo.save(&address).await?);
-                }
-                repository.save(&org).await
-            }
-        }
+        persistence.save(self.data.organization).await
     }
 }

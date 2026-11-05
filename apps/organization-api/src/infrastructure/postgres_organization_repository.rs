@@ -6,10 +6,109 @@ use database::DatabaseConnection;
 use shared::entities::{
     Address, AuditFields, BusinessError, Country, Document, DocumentType, TSID,
 };
-use shared::row_get_field;
 use shared::types::page::PageRequest;
 use sqlx::PgPool;
 use tracing::error;
+
+const ORGANIZATION_SELECT: &str = r#"
+    SELECT o.id, o.name, o.document_value, o.document_type, o.document_country,
+           o.created_at, o.updated_at, o.created_by, o.updated_by,
+           a.id AS addr_id, a.street AS addr_street, a.number AS addr_number,
+           a.complement AS addr_complement, a.neighborhood AS addr_neighborhood,
+           a.city AS addr_city, a.state AS addr_state, a.state_code AS addr_state_code,
+           a.postal_code AS addr_postal_code, a.country AS addr_country,
+           a.country_code AS addr_country_code, a.reference AS addr_reference,
+           a.created_at AS addr_created_at, a.updated_at AS addr_updated_at,
+           a.created_by AS addr_created_by, a.updated_by AS addr_updated_by
+    FROM organizations o
+    LEFT JOIN addresses a ON o.address_id = a.id AND a.deleted = FALSE
+    WHERE o.deleted = FALSE
+"#;
+
+#[derive(sqlx::FromRow)]
+struct OrganizationRow {
+    id: i64,
+    name: String,
+    document_value: String,
+    document_type: String,
+    document_country: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    created_by: String,
+    updated_by: String,
+    addr_id: Option<i64>,
+    addr_street: Option<String>,
+    addr_number: Option<String>,
+    addr_complement: Option<String>,
+    addr_neighborhood: Option<String>,
+    addr_city: Option<String>,
+    addr_state: Option<String>,
+    addr_state_code: Option<String>,
+    addr_postal_code: Option<String>,
+    addr_country: Option<String>,
+    addr_country_code: Option<String>,
+    addr_reference: Option<String>,
+    addr_created_at: Option<chrono::DateTime<chrono::Utc>>,
+    addr_updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    addr_created_by: Option<String>,
+    addr_updated_by: Option<String>,
+}
+
+impl TryFrom<OrganizationRow> for Organization {
+    type Error = BusinessError;
+
+    fn try_from(row: OrganizationRow) -> Result<Self, Self::Error> {
+        let country = row.document_country.as_deref().map(Country::from_code);
+        let document_type = DocumentType::from_code(&row.document_type, country);
+        let document = Document::new(row.document_value, document_type);
+        let audit = AuditFields {
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            created_by: row.created_by,
+            updated_by: row.updated_by,
+        };
+        let mut organization = Organization::new(
+            OrganizationId::new(TSID::from(row.id as u64)),
+            row.name,
+            document,
+        )
+        .with_audit(audit);
+
+        if let Some(address_id) = row.addr_id {
+            let address = Address::new(
+                required_address_field(row.addr_street, "street")?,
+                required_address_field(row.addr_number, "number")?,
+                row.addr_complement.unwrap_or_default(),
+                row.addr_neighborhood.unwrap_or_default(),
+                required_address_field(row.addr_city, "city")?,
+                row.addr_state.unwrap_or_default(),
+                row.addr_state_code.unwrap_or_default(),
+                required_address_field(row.addr_postal_code, "postal_code")?,
+                row.addr_country.unwrap_or_default(),
+                row.addr_country_code.unwrap_or_default(),
+                row.addr_reference.unwrap_or_default(),
+            )
+            .with_id(TSID::from(address_id as u64))
+            .with_audit(AuditFields {
+                created_at: required_address_field(row.addr_created_at, "created_at")?,
+                updated_at: required_address_field(row.addr_updated_at, "updated_at")?,
+                created_by: required_address_field(row.addr_created_by, "created_by")?,
+                updated_by: required_address_field(row.addr_updated_by, "updated_by")?,
+            });
+            organization = organization.with_address(address);
+        }
+
+        Ok(organization)
+    }
+}
+
+fn required_address_field<T>(value: Option<T>, field: &str) -> Result<T, BusinessError> {
+    value.ok_or_else(|| {
+        BusinessError::internal(format!(
+            "Campo obrigatório ausente no endereço associado: {field}"
+        ))
+    })
+}
 
 /// Implementação do repositório de `Organization` utilizando PostgreSQL e SQLx.
 #[derive(Debug, Clone)]
@@ -33,48 +132,6 @@ impl PostgresOrganizationRepository {
     /// Retorna uma referência ao pool de conexões subjacente.
     pub fn pool(&self) -> &PgPool {
         &self.pool
-    }
-
-    /// Salva a organização utilizando uma transação ativa do SQLx (`Transaction<'_, Postgres>`).
-    pub async fn save_with_tx(
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        organization: &Organization,
-    ) -> Result<Organization, BusinessError> {
-        Self::execute_save(&mut **tx, organization).await
-    }
-
-    /// Busca uma organização pelo ID utilizando uma transação ativa do SQLx (`Transaction<'_, Postgres>`).
-    pub async fn find_by_id_with_tx(
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        id: TSID,
-    ) -> Result<Organization, BusinessError> {
-        Self::execute_find_by_id(&mut **tx, id).await
-    }
-
-    /// Remove logicamente uma organização pelo ID utilizando uma transação ativa do SQLx (`Transaction<'_, Postgres>`).
-    pub async fn delete_with_tx(
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        id: TSID,
-        updated_by: &str,
-    ) -> Result<(), BusinessError> {
-        Self::execute_delete(&mut **tx, id, updated_by).await
-    }
-
-    /// Consulta organizações aplicando filtro opcional por nome e paginação por PageRequest utilizando uma transação ativa do SQLx.
-    pub async fn find_all_with_tx(
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        name: Option<&str>,
-        page_request: &PageRequest,
-    ) -> Result<Vec<Organization>, BusinessError> {
-        Self::execute_find_all(&mut **tx, name, page_request).await
-    }
-
-    /// Retorna a quantidade total de organizações que atendem ao filtro opcional por nome utilizando uma transação ativa do SQLx.
-    pub async fn count_with_tx(
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        name: Option<&str>,
-    ) -> Result<u64, BusinessError> {
-        Self::execute_count(&mut **tx, name).await
     }
 
     /// Executa o comando de inserção/atualização no PostgreSQL utilizando qualquer executor SQLx compatível.
@@ -159,26 +216,16 @@ impl PostgresOrganizationRepository {
         E: sqlx::Executor<'e, Database = sqlx::Postgres>,
     {
         let id_raw = id.number() as i64;
-        let query = r#"
-            SELECT o.id, o.name, o.document_value, o.document_type, o.document_country,
-                   o.created_at, o.updated_at, o.created_by, o.updated_by,
-                   a.id AS addr_id, a.street, a.number, a.complement, a.neighborhood,
-                   a.city, a.state, a.state_code, a.postal_code, a.country AS addr_country,
-                   a.country_code AS addr_country_code, a.reference,
-                   a.created_at AS addr_created_at, a.updated_at AS addr_updated_at,
-                   a.created_by AS addr_created_by, a.updated_by AS addr_updated_by
-            FROM organizations o
-            LEFT JOIN addresses a ON o.address_id = a.id AND a.deleted = FALSE
-            WHERE o.id = $1 AND o.deleted = FALSE
-        "#;
-
-        let row_opt = sqlx::query(query)
-            .bind(id_raw)
+        let mut query = sqlx::QueryBuilder::<sqlx::Postgres>::new(ORGANIZATION_SELECT);
+        let row_opt = query
+            .push(" AND o.id = ")
+            .push_bind(id_raw)
+            .build_query_as::<OrganizationRow>()
             .fetch_optional(executor)
             .await
             .map_err(|err| {
                 error!("Fail to get organization by id {}: {:?}", id, err);
-                OrganizationBusinessErrors::not_found()
+                BusinessError::internal(format!("Falha ao consultar organização: {err}"))
             })?;
 
         let row = match row_opt {
@@ -186,7 +233,7 @@ impl PostgresOrganizationRepository {
             None => return Err(OrganizationBusinessErrors::not_found()),
         };
 
-        Self::map_row_to_organization(&row)
+        row.try_into()
     }
 
     /// Executa o comando de exclusão lógica (soft delete) no PostgreSQL utilizando qualquer executor SQLx compatível.
@@ -237,145 +284,27 @@ impl PostgresOrganizationRepository {
         let limit = page_request.limit() as i64;
         let offset = page_request.offset() as i64;
 
-        let rows = if let Some(filter) = name_filter {
-            let pattern = format!("%{filter}%");
-            let query = r#"
-                SELECT o.id, o.name, o.document_value, o.document_type, o.document_country,
-                       o.created_at, o.updated_at, o.created_by, o.updated_by,
-                       a.id AS addr_id, a.street, a.number, a.complement, a.neighborhood,
-                       a.city, a.state, a.state_code, a.postal_code, a.country AS addr_country,
-                       a.country_code AS addr_country_code, a.reference,
-                       a.created_at AS addr_created_at, a.updated_at AS addr_updated_at,
-                       a.created_by AS addr_created_by, a.updated_by AS addr_updated_by
-                FROM organizations o
-                LEFT JOIN addresses a ON o.address_id = a.id AND a.deleted = FALSE
-                WHERE o.deleted = FALSE AND o.name ILIKE $1
-                ORDER BY o.name, o.id
-                LIMIT $2 OFFSET $3
-            "#;
-            sqlx::query(query)
-                .bind(pattern)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(executor)
-                .await
-        } else {
-            let query = r#"
-                SELECT o.id, o.name, o.document_value, o.document_type, o.document_country,
-                       o.created_at, o.updated_at, o.created_by, o.updated_by,
-                       a.id AS addr_id, a.street, a.number, a.complement, a.neighborhood,
-                       a.city, a.state, a.state_code, a.postal_code, a.country AS addr_country,
-                       a.country_code AS addr_country_code, a.reference,
-                       a.created_at AS addr_created_at, a.updated_at AS addr_updated_at,
-                       a.created_by AS addr_created_by, a.updated_by AS addr_updated_by
-                FROM organizations o
-                LEFT JOIN addresses a ON o.address_id = a.id AND a.deleted = FALSE
-                WHERE o.deleted = FALSE
-                ORDER BY o.name, o.id
-                LIMIT $1 OFFSET $2
-            "#;
-            sqlx::query(query)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(executor)
-                .await
-        };
-
-        let rows = rows.map_err(|err| {
-            error!("Fail to list organizations: {:?}", err);
-            BusinessError::internal(format!("Falha ao consultar organizações: {err}"))
-        })?;
-
-        let mut organizations = Vec::with_capacity(rows.len());
-        for row in &rows {
-            organizations.push(Self::map_row_to_organization(row)?);
+        let mut query = sqlx::QueryBuilder::<sqlx::Postgres>::new(ORGANIZATION_SELECT);
+        if let Some(filter) = name_filter {
+            query
+                .push(" AND o.name ILIKE ")
+                .push_bind(format!("%{filter}%"));
         }
 
-        Ok(organizations)
-    }
+        let rows = query
+            .push(" ORDER BY o.name, o.id LIMIT ")
+            .push_bind(limit)
+            .push(" OFFSET ")
+            .push_bind(offset)
+            .build_query_as::<OrganizationRow>()
+            .fetch_all(executor)
+            .await
+            .map_err(|err| {
+                error!("Fail to list organizations: {:?}", err);
+                BusinessError::internal(format!("Falha ao consultar organizações: {err}"))
+            })?;
 
-    fn map_row_to_organization(row: &sqlx::postgres::PgRow) -> Result<Organization, BusinessError> {
-        let id_raw: i64 = row_get_field(row, "id")?;
-        let name: String = row_get_field(row, "name")?;
-        let doc_value: String = row_get_field(row, "document_value")?;
-        let doc_type_str: String = row_get_field(row, "document_type")?;
-        let doc_country: Option<String> = row_get_field(row, "document_country")?;
-        let created_at: chrono::DateTime<chrono::Utc> = row_get_field(row, "created_at")?;
-        let updated_at: chrono::DateTime<chrono::Utc> = row_get_field(row, "updated_at")?;
-        let created_by: String = row_get_field(row, "created_by")?;
-        let updated_by: String = row_get_field(row, "updated_by")?;
-
-        let country = doc_country.as_deref().map(Country::from_code);
-        let document_type = DocumentType::from_code(&doc_type_str, country);
-        let document = Document::new(doc_value, document_type);
-        let audit = AuditFields {
-            created_at,
-            updated_at,
-            created_by,
-            updated_by,
-        };
-
-        let mut organization = Organization::new(
-            OrganizationId::new(TSID::from(id_raw as u64)),
-            name,
-            document,
-        )
-        .with_audit(audit);
-
-        let addr_id: Option<i64> = row_get_field(row, "addr_id").ok().flatten();
-        if let Some(addr_id_val) = addr_id {
-            let street: String = row_get_field(row, "street").unwrap_or_default();
-            let number: String = row_get_field(row, "number").unwrap_or_default();
-            let complement: Option<String> = row_get_field(row, "complement").ok().flatten();
-            let neighborhood: Option<String> = row_get_field(row, "neighborhood").ok().flatten();
-            let city: String = row_get_field(row, "city").unwrap_or_default();
-            let state: Option<String> = row_get_field(row, "state").ok().flatten();
-            let state_code: Option<String> = row_get_field(row, "state_code").ok().flatten();
-            let postal_code: String = row_get_field(row, "postal_code").unwrap_or_default();
-            let addr_country: Option<String> = row_get_field(row, "addr_country").ok().flatten();
-            let addr_country_code: Option<String> =
-                row_get_field(row, "addr_country_code").ok().flatten();
-            let reference: Option<String> = row_get_field(row, "reference").ok().flatten();
-            let addr_created_at: Option<chrono::DateTime<chrono::Utc>> =
-                row_get_field(row, "addr_created_at").ok().flatten();
-            let addr_updated_at: Option<chrono::DateTime<chrono::Utc>> =
-                row_get_field(row, "addr_updated_at").ok().flatten();
-            let addr_created_by: Option<String> =
-                row_get_field(row, "addr_created_by").ok().flatten();
-            let addr_updated_by: Option<String> =
-                row_get_field(row, "addr_updated_by").ok().flatten();
-
-            let mut address = Address::new(
-                street,
-                number,
-                complement.unwrap_or_default(),
-                neighborhood.unwrap_or_default(),
-                city,
-                state.unwrap_or_default(),
-                state_code.unwrap_or_default(),
-                postal_code,
-                addr_country.unwrap_or_default(),
-                addr_country_code.unwrap_or_default(),
-                reference.unwrap_or_default(),
-            );
-            address.set_id(TSID::from(addr_id_val as u64));
-            if let (Some(c_at), Some(u_at), Some(c_by), Some(u_by)) = (
-                addr_created_at,
-                addr_updated_at,
-                addr_created_by,
-                addr_updated_by,
-            ) {
-                address.set_audit(Some(AuditFields {
-                    created_at: c_at,
-                    updated_at: u_at,
-                    created_by: c_by,
-                    updated_by: u_by,
-                }));
-            }
-            organization = organization.with_address(address);
-        }
-
-        Ok(organization)
+        rows.into_iter().map(TryInto::try_into).collect()
     }
 
     /// Executa a contagem de organizações que atendem ao filtro opcional por nome no PostgreSQL.
@@ -455,14 +384,14 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         value: &Organization,
     ) -> Result<Organization, BusinessError> {
-        Self::save_with_tx(tx, value).await
+        Self::execute_save(&mut **tx, value).await
     }
     async fn find_by_id_in_tx(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         id: TSID,
     ) -> Result<Organization, BusinessError> {
-        Self::find_by_id_with_tx(tx, id).await
+        Self::execute_find_by_id(&mut **tx, id).await
     }
     async fn delete_in_tx(
         &self,
@@ -470,7 +399,7 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         id: TSID,
         updated_by: &str,
     ) -> Result<(), BusinessError> {
-        Self::delete_with_tx(tx, id, updated_by).await
+        Self::execute_delete(&mut **tx, id, updated_by).await
     }
     async fn find_all_in_tx(
         &self,
@@ -478,14 +407,14 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         name: Option<&str>,
         page: &PageRequest,
     ) -> Result<Vec<Organization>, BusinessError> {
-        Self::find_all_with_tx(tx, name, page).await
+        Self::execute_find_all(&mut **tx, name, page).await
     }
     async fn count_in_tx(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         name: Option<&str>,
     ) -> Result<u64, BusinessError> {
-        Self::count_with_tx(tx, name).await
+        Self::execute_count(&mut **tx, name).await
     }
 }
 

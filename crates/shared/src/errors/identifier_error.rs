@@ -11,10 +11,10 @@ pub enum IdentifierError {
 impl fmt::Display for IdentifierError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            IdentifierError::InvalidFormat(msg) => write!(f, "Formato de identificador inválido: {msg}"),
-            IdentifierError::ParseError(msg) => write!(f, "Erro ao converter identificador: {msg}"),
+            IdentifierError::InvalidFormat(msg) => write!(f, "Invalid identifier format: {msg}"),
+            IdentifierError::ParseError(msg) => write!(f, "Failed to parse identifier: {msg}"),
             IdentifierError::NonPositiveValue(val) => {
-                write!(f, "Identificador deve ser um número positivo, recebido: {val}")
+                write!(f, "Identifier must be a positive number, received: {val}")
             }
         }
     }

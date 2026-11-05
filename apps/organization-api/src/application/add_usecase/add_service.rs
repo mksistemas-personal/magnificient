@@ -1,3 +1,4 @@
+use crate::application::OrganizationPersistence;
 use crate::application::add_usecase::data::{AddOrganizationRequest, InitialContextData};
 use crate::application::add_usecase::states::Initial;
 use crate::application::add_usecase::steps::{
@@ -9,33 +10,28 @@ use async_trait::async_trait;
 use database::UnitOfWork;
 use shared::entities::use_case::context::Context;
 use shared::entities::{AddressRepository, AsyncAddEntityUseCase, BusinessError};
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AddOrganizationService {
-    repository: Arc<dyn OrganizationRepository>,
-    address_repository: Option<Arc<dyn AddressRepository>>,
-    uow: Option<UnitOfWork>,
+    persistence: OrganizationPersistence,
 }
 
 impl AddOrganizationService {
     pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            address_repository: None,
-            uow: None,
-        }
+        Self::with_persistence(OrganizationPersistence::new(repository))
+    }
+
+    pub fn with_persistence(persistence: OrganizationPersistence) -> Self {
+        Self { persistence }
     }
 
     pub fn new_with_repositories(
         repository: impl OrganizationRepository + 'static,
         address_repository: impl AddressRepository + 'static,
     ) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            address_repository: Some(Arc::new(address_repository)),
-            uow: None,
-        }
+        Self::with_persistence(
+            OrganizationPersistence::new(repository).with_address_repository(address_repository),
+        )
     }
 
     pub fn new_with_repositories_and_uow(
@@ -43,11 +39,11 @@ impl AddOrganizationService {
         address_repository: impl AddressRepository + 'static,
         uow: UnitOfWork,
     ) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            address_repository: Some(Arc::new(address_repository)),
-            uow: Some(uow),
-        }
+        Self::with_persistence(
+            OrganizationPersistence::new(repository)
+                .with_address_repository(address_repository)
+                .with_unit_of_work(uow),
+        )
     }
 
     pub async fn execute(
@@ -71,11 +67,7 @@ impl AsyncAddEntityUseCase<AddOrganizationRequest, Organization> for AddOrganiza
             .validate()?
             .validate_address()?
             .build()?
-            .save(
-                self.repository.as_ref(),
-                self.address_repository.as_deref(),
-                self.uow.as_ref(),
-            )
+            .save(&self.persistence)
             .await
     }
 }
@@ -233,7 +225,7 @@ mod tests {
             "São Paulo",
             "São Paulo",
             "SP",
-            "123", // CEP inválido (menos de 8 dígitos)
+            "123", // Invalid postal code (fewer than 8 digits)
             "Brasil",
             "BR",
             "",

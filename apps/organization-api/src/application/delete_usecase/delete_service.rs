@@ -1,3 +1,4 @@
+use crate::application::OrganizationPersistence;
 use crate::application::delete_usecase::data::*;
 use crate::application::delete_usecase::states::*;
 use crate::application::delete_usecase::steps::{
@@ -9,30 +10,26 @@ use database::UnitOfWork;
 use shared::entities::BusinessError;
 use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncDeleteEntityUseCase;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct DeleteOrganizationService {
-    repository: Arc<dyn OrganizationRepository>,
-    uow: Option<UnitOfWork>,
+    persistence: OrganizationPersistence,
 }
 
 impl DeleteOrganizationService {
     pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            uow: None,
-        }
+        Self::with_persistence(OrganizationPersistence::new(repository))
+    }
+
+    pub fn with_persistence(persistence: OrganizationPersistence) -> Self {
+        Self { persistence }
     }
 
     pub fn new_with_uow(
         repository: impl OrganizationRepository + 'static,
         uow: UnitOfWork,
     ) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            uow: Some(uow),
-        }
+        Self::with_persistence(OrganizationPersistence::new(repository).with_unit_of_work(uow))
     }
 
     pub async fn execute(&self, request: DeleteOrganizationRequest) -> Result<(), BusinessError> {
@@ -46,7 +43,7 @@ impl AsyncDeleteEntityUseCase<DeleteOrganizationRequest, ()> for DeleteOrganizat
     async fn execute(&self, request: DeleteOrganizationRequest) -> Result<(), BusinessError> {
         Context::<Initial, _>::new(InitialContextData { request })
             .validate()?
-            .delete(self.repository.as_ref(), self.uow.as_ref())
+            .delete(&self.persistence)
             .await
     }
 }

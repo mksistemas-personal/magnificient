@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Entidade que encapsula os campos de auditoria de registros do sistema.
+/// Entity that encapsulates record audit fields.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuditFields {
     pub created_at: DateTime<Utc>,
@@ -76,28 +76,28 @@ impl AuditFields {
         self.updated(updated_by);
     }
 
-    /// Retorna uma nova instância atualizada com os novos dados de atualização (estilo builder).
+    /// Returns a new instance with updated audit fields (builder style).
     pub fn with_updated(mut self, updated_by: impl Into<String>) -> Self {
         self.updated(updated_by);
         self
     }
 
-    /// Retorna o autor da criação.
+    /// Returns the creator.
     pub fn created_by(&self) -> &str {
         &self.created_by
     }
 
-    /// Retorna o autor da última atualização.
+    /// Returns the author of the last update.
     pub fn updated_by(&self) -> &str {
         &self.updated_by
     }
 
-    /// Retorna o timestamp de criação.
+    /// Returns the creation timestamp.
     pub fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
 
-    /// Retorna o timestamp da última atualização.
+    /// Returns the last update timestamp.
     pub fn updated_at(&self) -> DateTime<Utc> {
         self.updated_at
     }

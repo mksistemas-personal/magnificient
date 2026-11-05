@@ -2,12 +2,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum DatabaseError {
-    #[error("Erro ao conectar ao banco de dados: {0}")]
+    #[error("Failed to connect to the database: {0}")]
     ConnectionError(#[from] sqlx::Error),
 
-    #[error("Configuração de banco de dados inválida: {0}")]
+    #[error("Invalid database configuration: {0}")]
     ConfigurationError(String),
 
-    #[error("Erro na execução de migração: {0}")]
+    #[error("Migration failed: {0}")]
     MigrationError(String),
 }

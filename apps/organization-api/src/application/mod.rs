@@ -4,6 +4,7 @@ mod add_usecase;
 mod all_usecase;
 mod by_id_usecase;
 mod delete_usecase;
+mod persistence;
 mod update_usecase;
 
 pub use crate::errors::{OrganizationBusinessErrors, OrganizationErrors};
@@ -17,4 +18,5 @@ pub use by_id_usecase::{
     GetOrganizationByIdService,
 };
 pub use delete_usecase::{DeleteOrganizationRequest, DeleteOrganizationService};
+pub use persistence::OrganizationPersistence;
 pub use update_usecase::{UpdateOrganizationRequest, UpdateOrganizationService};

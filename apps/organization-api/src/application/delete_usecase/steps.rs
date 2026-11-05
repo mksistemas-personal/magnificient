@@ -1,9 +1,8 @@
 use crate::application::OrganizationBusinessErrors;
+use crate::application::OrganizationPersistence;
 use crate::application::delete_usecase::data::{InitialContextData, ValidatedContextData};
 use crate::application::delete_usecase::states::{Initial, Validated};
-use crate::domain::OrganizationRepository;
 use async_trait::async_trait;
-use database::UnitOfWork;
 use shared::entities::BusinessError;
 use shared::entities::use_case::context::Context;
 
@@ -28,33 +27,17 @@ impl ValidateInitialContext for Context<Initial, InitialContextData> {
 
 #[async_trait]
 pub trait DeleteOrganizationContext {
-    async fn delete(
-        self,
-        repository: &dyn OrganizationRepository,
-        uow: Option<&UnitOfWork>,
-    ) -> Result<(), BusinessError>;
+    async fn delete(self, persistence: &OrganizationPersistence) -> Result<(), BusinessError>;
 }
 
 #[async_trait]
 impl DeleteOrganizationContext for Context<Validated, ValidatedContextData> {
-    async fn delete(
-        self,
-        repository: &dyn OrganizationRepository,
-        uow: Option<&UnitOfWork>,
-    ) -> Result<(), BusinessError> {
-        let org_id = self.data.request.organization_id;
-        let updated_by = self.data.request.updated_by;
-        match uow {
-            Some(uow) => uow
-                .run_tx(|mut tx| async move {
-                    repository
-                        .delete_in_tx(&mut tx, *org_id, &updated_by)
-                        .await?;
-                    Ok(((), tx))
-                })
-                .await
-                .map(|_| ()),
-            None => repository.delete(*org_id, &updated_by).await,
-        }
+    async fn delete(self, persistence: &OrganizationPersistence) -> Result<(), BusinessError> {
+        persistence
+            .delete(
+                *self.data.request.organization_id,
+                &self.data.request.updated_by,
+            )
+            .await
     }
 }

@@ -1,3 +1,4 @@
+use crate::application::OrganizationPersistence;
 use crate::application::by_id_usecase::data::{FindOrganizationByIdRequest, InitialContextData};
 use crate::application::by_id_usecase::states::Initial;
 use crate::application::by_id_usecase::steps::{
@@ -9,34 +10,30 @@ use database::UnitOfWork;
 use shared::entities::BusinessError;
 use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncGetByIdUseCase;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct FindOrganizationByIdService {
-    repository: Arc<dyn OrganizationRepository>,
-    uow: Option<UnitOfWork>,
+    persistence: OrganizationPersistence,
 }
 
 impl FindOrganizationByIdService {
     pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            uow: None,
-        }
+        Self::with_persistence(OrganizationPersistence::new(repository))
+    }
+
+    pub fn with_persistence(persistence: OrganizationPersistence) -> Self {
+        Self { persistence }
     }
 
     pub fn new_with_uow(
         repository: impl OrganizationRepository + 'static,
         uow: UnitOfWork,
     ) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            uow: Some(uow),
-        }
+        Self::with_persistence(OrganizationPersistence::new(repository).with_unit_of_work(uow))
     }
 
     pub fn with_uow(mut self, uow: UnitOfWork) -> Self {
-        self.uow = Some(uow);
+        self.persistence = self.persistence.with_unit_of_work(uow);
         self
     }
 
@@ -63,7 +60,7 @@ impl AsyncGetByIdUseCase<FindOrganizationByIdRequest, Organization>
     ) -> Result<Organization, BusinessError> {
         Context::<Initial, _>::new(InitialContextData { request })
             .validate()?
-            .find(self.repository.as_ref(), self.uow.as_ref())
+            .find(&self.persistence)
             .await
     }
 }

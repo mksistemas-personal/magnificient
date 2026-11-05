@@ -1,3 +1,4 @@
+use crate::application::OrganizationPersistence;
 use crate::application::update_usecase::data::*;
 use crate::application::update_usecase::states::*;
 use crate::application::update_usecase::steps::{
@@ -10,33 +11,28 @@ use database::UnitOfWork;
 use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncUpdateEntityUseCase;
 use shared::entities::{AddressRepository, BusinessError};
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct UpdateOrganizationService {
-    repository: Arc<dyn OrganizationRepository>,
-    address_repository: Option<Arc<dyn AddressRepository>>,
-    uow: Option<UnitOfWork>,
+    persistence: OrganizationPersistence,
 }
 
 impl UpdateOrganizationService {
     pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            address_repository: None,
-            uow: None,
-        }
+        Self::with_persistence(OrganizationPersistence::new(repository))
+    }
+
+    pub fn with_persistence(persistence: OrganizationPersistence) -> Self {
+        Self { persistence }
     }
 
     pub fn new_with_repositories(
         repository: impl OrganizationRepository + 'static,
         address_repository: impl AddressRepository + 'static,
     ) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            address_repository: Some(Arc::new(address_repository)),
-            uow: None,
-        }
+        Self::with_persistence(
+            OrganizationPersistence::new(repository).with_address_repository(address_repository),
+        )
     }
 
     pub fn new_with_repositories_and_uow(
@@ -44,22 +40,18 @@ impl UpdateOrganizationService {
         address_repository: impl AddressRepository + 'static,
         uow: UnitOfWork,
     ) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            address_repository: Some(Arc::new(address_repository)),
-            uow: Some(uow),
-        }
+        Self::with_persistence(
+            OrganizationPersistence::new(repository)
+                .with_address_repository(address_repository)
+                .with_unit_of_work(uow),
+        )
     }
 
     pub fn new_with_uow(
         repository: impl OrganizationRepository + 'static,
         uow: UnitOfWork,
     ) -> Self {
-        Self {
-            repository: Arc::new(repository),
-            address_repository: None,
-            uow: Some(uow),
-        }
+        Self::with_persistence(OrganizationPersistence::new(repository).with_unit_of_work(uow))
     }
 
     pub async fn execute(
@@ -81,18 +73,31 @@ impl AsyncUpdateEntityUseCase<UpdateOrganizationRequest, Organization>
         &self,
         request: UpdateOrganizationRequest,
     ) -> Result<Organization, BusinessError> {
-        Context::<Initial, _>::new(InitialContextData { request })
+        let validated = Context::<Initial, _>::new(InitialContextData { request })
             .validate()?
-            .validate_address()?
-            .load(self.repository.as_ref(), self.uow.as_ref())
-            .await?
-            .change()?
-            .save(
-                self.repository.as_ref(),
-                self.address_repository.as_deref(),
-                self.uow.as_ref(),
-            )
-            .await
+            .validate_address()?;
+
+        match self.persistence.unit_of_work.as_ref() {
+            Some(uow) => {
+                let persistence = self.persistence.clone();
+                uow.transaction(move |tx| {
+                    Box::pin(async move {
+                        let loaded = validated.load_in_tx(&persistence, &mut *tx).await?;
+                        let changed = loaded.change()?;
+                        changed.save_in_tx(&persistence, &mut *tx).await
+                    })
+                })
+                .await
+            }
+            None => {
+                validated
+                    .load(&self.persistence)
+                    .await?
+                    .change()?
+                    .save(&self.persistence)
+                    .await
+            }
+        }
     }
 }
 

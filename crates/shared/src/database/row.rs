@@ -1,7 +1,7 @@
 use crate::entities::BusinessError;
 use sqlx::{ColumnIndex, Decode, Row, Type};
 
-/// Extrai um campo tipado de uma linha do banco de dados (`Row`), mapeando eventuais erros para `BusinessError`.
+/// Extracts a typed field from a database row (`Row`), mapping errors to `BusinessError`.
 pub fn row_get_field<'r, T, R, I>(row: &'r R, index: I) -> Result<T, BusinessError>
 where
     R: Row,
@@ -13,7 +13,7 @@ where
     })
 }
 
-/// Trait de extensão para conveniência no encadeamento de chamadas em linhas de banco de dados (`Row`).
+/// Extension trait for chaining operations on database rows (`Row`).
 pub trait RowExt {
     fn get_field<'r, T, I>(&'r self, index: I) -> Result<T, BusinessError>
     where

@@ -33,27 +33,27 @@ impl<T> EntityId<T> {
         Ok(Self::new(value))
     }
 
-    /// Retorna o `TSID` do identificador
+    /// Returns the identifier `TSID`.
     pub const fn value(&self) -> TSID {
         self.value
     }
 
-    /// Retorna o `TSID` do identificador
+    /// Returns the identifier `TSID`.
     pub const fn as_tsid(&self) -> TSID {
         self.value
     }
 
-    /// Retorna o valor numérico `u64` do identificador
+    /// Returns the numeric `u64` identifier value.
     pub fn number(&self) -> u64 {
         self.value.number()
     }
 
-    /// Consome o identificador retornando o `TSID`
+    /// Consumes the identifier and returns its `TSID`.
     pub const fn into_inner(self) -> TSID {
         self.value
     }
 
-    /// Retorna se o identificador possui um valor válido (diferente de zero)
+    /// Returns whether the identifier has a valid (non-zero) value.
     pub fn is_valid(&self) -> bool {
         self.value.number() > 0
     }
@@ -154,7 +154,7 @@ impl<T> FromStr for EntityId<T> {
             return Ok(Self::new(TSID::from(num)));
         }
         Err(IdentifierError::ParseError(format!(
-            "Não foi possível converter '{s}' em TSID"
+            "Could not convert '{s}' to TSID"
         )))
     }
 }

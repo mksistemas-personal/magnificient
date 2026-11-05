@@ -1,4 +1,3 @@
-use crate::database::row_get_field;
 use crate::entities::address::Address;
 use crate::entities::{AuditFields, BusinessError};
 use async_trait::async_trait;
@@ -11,11 +10,11 @@ use tsid::{TSID, create_tsid};
 /// Trait que define o contrato de persistência para a entidade `Address`.
 #[async_trait]
 pub trait AddressRepository: Send + Sync {
-    /// Salva ou insere um endereço na base de dados.
-    /// Caso o endereço não possua um id, um novo identificador TSID será gerado.
+    /// Saves or inserts an address in the database.
+    /// Generates a new TSID if the address does not have an ID.
     async fn save(&self, address: &Address) -> Result<Address, BusinessError>;
 
-    /// Salva um endereço associado explicitamente a um identificador TSID e dados de auditoria opcionais.
+    /// Saves an address with an explicit TSID and optional audit fields.
     async fn save_with_id(
         &self,
         id: TSID,
@@ -23,22 +22,20 @@ pub trait AddressRepository: Send + Sync {
         audit: Option<&AuditFields>,
     ) -> Result<Address, BusinessError>;
 
-    /// Busca um endereço pelo seu identificador TSID.
+    /// Finds an address by its TSID.
     async fn find_by_id(&self, id: TSID) -> Result<Address, BusinessError>;
 
-    /// Remove logicamente um endereço pelo seu identificador TSID.
+    /// Soft-deletes an address by its TSID.
     async fn delete(&self, id: TSID, updated_by: &str) -> Result<(), BusinessError>;
 
     async fn save_in_tx(
         &self,
         _tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         address: &Address,
-    ) -> Result<Address, BusinessError> {
-        self.save(address).await
-    }
+    ) -> Result<Address, BusinessError>;
 }
 
-/// Implementação em memória do repositório de `Address`, ideal para testes unitários e de integração.
+/// In-memory implementation of the `Address` repository, suitable for unit and integration tests.
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryAddressRepository {
     items: Arc<RwLock<HashMap<TSID, Address>>>,
@@ -83,6 +80,15 @@ impl AddressRepository for InMemoryAddressRepository {
         Ok(saved_address)
     }
 
+    async fn save_in_tx(
+        &self,
+        _tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        address: &Address,
+    ) -> Result<Address, BusinessError> {
+        // The in-memory adapter has no database transaction or rollback semantics.
+        self.save(address).await
+    }
+
     async fn save_with_id(
         &self,
         id: TSID,
@@ -105,7 +111,7 @@ impl AddressRepository for InMemoryAddressRepository {
     async fn find_by_id(&self, id: TSID) -> Result<Address, BusinessError> {
         let map = self.items.read().unwrap();
         map.get(&id).cloned().ok_or_else(|| {
-            BusinessError::not_found(format!("Endereço não encontrado para o ID: {id}"))
+            BusinessError::not_found(format!("Address not found for ID: {id}"))
         })
     }
 
@@ -113,14 +119,60 @@ impl AddressRepository for InMemoryAddressRepository {
         let mut map = self.items.write().unwrap();
         if map.remove(&id).is_none() {
             return Err(BusinessError::not_found(format!(
-                "Endereço não encontrado para remoção com ID: {id}"
+                "Address not found for deletion with ID: {id}"
             )));
         }
         Ok(())
     }
 }
 
-/// Implementação do repositório de `Address` utilizando PostgreSQL e SQLx.
+/// Represents an address row returned by PostgreSQL.
+#[derive(sqlx::FromRow)]
+struct AddressRow {
+    id: i64,
+    street: String,
+    number: String,
+    complement: Option<String>,
+    neighborhood: Option<String>,
+    city: String,
+    state: Option<String>,
+    state_code: Option<String>,
+    postal_code: String,
+    country: Option<String>,
+    country_code: Option<String>,
+    reference: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    created_by: String,
+    updated_by: String,
+}
+
+impl From<AddressRow> for Address {
+    fn from(row: AddressRow) -> Self {
+        Address::new(
+            row.street,
+            row.number,
+            row.complement.unwrap_or_default(),
+            row.neighborhood.unwrap_or_default(),
+            row.city,
+            row.state.unwrap_or_default(),
+            row.state_code.unwrap_or_default(),
+            row.postal_code,
+            row.country.unwrap_or_default(),
+            row.country_code.unwrap_or_default(),
+            row.reference.unwrap_or_default(),
+        )
+        .with_id(TSID::from(row.id as u64))
+        .with_audit(AuditFields {
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            created_by: row.created_by,
+            updated_by: row.updated_by,
+        })
+    }
+}
+
+/// PostgreSQL and SQLx implementation of the `Address` repository.
 #[derive(Debug, Clone)]
 pub struct PostgresAddressRepository {
     pool: PgPool,
@@ -137,31 +189,6 @@ impl PostgresAddressRepository {
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
-    }
-
-    /// Salva o endereço utilizando uma transação ativa do SQLx (`Transaction<'_, Postgres>`).
-    pub async fn save_with_tx(
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        address: &Address,
-    ) -> Result<Address, BusinessError> {
-        Self::execute_save(&mut **tx, address).await
-    }
-
-    /// Busca um endereço pelo ID utilizando uma transação ativa do SQLx.
-    pub async fn find_by_id_with_tx(
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        id: TSID,
-    ) -> Result<Address, BusinessError> {
-        Self::execute_find_by_id(&mut **tx, id).await
-    }
-
-    /// Remove logicamente um endereço pelo ID utilizando uma transação ativa do SQLx.
-    pub async fn delete_with_tx(
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        id: TSID,
-        updated_by: &str,
-    ) -> Result<(), BusinessError> {
-        Self::execute_delete(&mut **tx, id, updated_by).await
     }
 
     async fn execute_save<'e, E>(executor: E, address: &Address) -> Result<Address, BusinessError>
@@ -270,8 +297,8 @@ impl PostgresAddressRepository {
             .execute(executor)
             .await
             .map_err(|err| {
-                error!("Erro ao salvar endereço no banco de dados: {:?}", err);
-                BusinessError::internal(format!("Falha ao persistir endereço: {err}"))
+                error!("Failed to save address to the database: {:?}", err);
+                BusinessError::internal(format!("Failed to persist address: {err}"))
             })?;
 
         let mut saved = address.clone();
@@ -299,65 +326,18 @@ impl PostgresAddressRepository {
             WHERE id = $1 AND deleted = FALSE
         "#;
 
-        let row_opt = sqlx::query(query)
+        let row_opt = sqlx::query_as::<_, AddressRow>(query)
             .bind(id_raw)
             .fetch_optional(executor)
             .await
             .map_err(|err| {
-                error!("Falha ao buscar endereço pelo id {}: {:?}", id, err);
-                BusinessError::not_found(format!("Endereço não encontrado para o ID: {id}"))
+                error!("Failed to fetch address by ID {}: {:?}", id, err);
+                BusinessError::internal(format!("Failed to query address: {err}"))
             })?;
 
-        let row = match row_opt {
-            Some(row) => row,
-            None => {
-                return Err(BusinessError::not_found(format!(
-                    "Endereço não encontrado para o ID: {id}"
-                )));
-            }
-        };
-
-        let id_raw: i64 = row_get_field(&row, "id")?;
-        let street: String = row_get_field(&row, "street")?;
-        let number: String = row_get_field(&row, "number")?;
-        let complement: Option<String> = row_get_field(&row, "complement")?;
-        let neighborhood: Option<String> = row_get_field(&row, "neighborhood")?;
-        let city: String = row_get_field(&row, "city")?;
-        let state: Option<String> = row_get_field(&row, "state")?;
-        let state_code: Option<String> = row_get_field(&row, "state_code")?;
-        let postal_code: String = row_get_field(&row, "postal_code")?;
-        let country: Option<String> = row_get_field(&row, "country")?;
-        let country_code: Option<String> = row_get_field(&row, "country_code")?;
-        let reference: Option<String> = row_get_field(&row, "reference")?;
-        let created_at: chrono::DateTime<chrono::Utc> = row_get_field(&row, "created_at")?;
-        let updated_at: chrono::DateTime<chrono::Utc> = row_get_field(&row, "updated_at")?;
-        let created_by: String = row_get_field(&row, "created_by")?;
-        let updated_by: String = row_get_field(&row, "updated_by")?;
-
-        let audit = AuditFields {
-            created_at,
-            updated_at,
-            created_by,
-            updated_by,
-        };
-
-        let address = Address {
-            id: Some(TSID::from(id_raw as u64)),
-            street,
-            number,
-            complement: complement.unwrap_or_default(),
-            neighborhood: neighborhood.unwrap_or_default(),
-            city,
-            state: state.unwrap_or_default(),
-            state_code: state_code.unwrap_or_default(),
-            postal_code,
-            country: country.unwrap_or_default(),
-            country_code: country_code.unwrap_or_default(),
-            reference: reference.unwrap_or_default(),
-            audit: Some(audit),
-        };
-
-        Ok(address)
+        row_opt
+            .map(Address::from)
+            .ok_or_else(|| BusinessError::not_found(format!("Address not found for ID: {id}")))
     }
 
     async fn execute_delete<'e, E>(
@@ -386,15 +366,15 @@ impl PostgresAddressRepository {
             .await
             .map_err(|err| {
                 error!(
-                    "Erro ao remover logicamente endereço com ID {}: {:?}",
+                    "Failed to soft-delete address with ID {}: {:?}",
                     id, err
                 );
-                BusinessError::internal(format!("Falha ao remover endereço: {err}"))
+                BusinessError::internal(format!("Failed to delete address: {err}"))
             })?;
 
         if result.rows_affected() == 0 {
             return Err(BusinessError::not_found(format!(
-                "Endereço não encontrado para remoção com ID: {id}"
+                "Address not found for deletion with ID: {id}"
             )));
         }
 
@@ -435,7 +415,7 @@ impl AddressRepository for PostgresAddressRepository {
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         address: &Address,
     ) -> Result<Address, BusinessError> {
-        Self::save_with_tx(tx, address).await
+        Self::execute_save(&mut **tx, address).await
     }
 }
 

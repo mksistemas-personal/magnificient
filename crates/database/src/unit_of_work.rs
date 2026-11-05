@@ -3,12 +3,16 @@ use crate::error::DatabaseError;
 use shared::entities::BusinessError;
 use sqlx::{PgPool, Postgres, Transaction};
 use std::future::Future;
+use std::pin::Pin;
 use tracing::{debug, error};
+
+type TransactionOperationFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, BusinessError>> + Send + 'a>>;
 
 /// Gerenciador de Unidade de Trabalho (Unit of Work) para controle de transações no PostgreSQL via SQLx.
 ///
 /// Encapsula o ciclo de vida transacional (`begin`, `commit`, `rollback`) através de funções de
-/// ordem superior (`run_tx`), garantindo atomicidade e isolamento de falhas de forma idiomática e reutilizável.
+/// ordem superior (`transaction`), garantindo atomicidade e isolamento de falhas de forma idiomática e reutilizável.
 #[derive(Debug, Clone)]
 pub struct UnitOfWork {
     pool: PgPool,
@@ -16,7 +20,7 @@ pub struct UnitOfWork {
 }
 
 impl UnitOfWork {
-    /// Cria uma nova instância de `UnitOfWork` a partir de um `PgPool`.
+    /// Creates a `UnitOfWork` from a `PgPool`.
     pub fn new(pool: PgPool) -> Self {
         Self { pool, schema: None }
     }
@@ -47,7 +51,7 @@ impl UnitOfWork {
         self.schema.as_deref()
     }
 
-    /// Cria uma nova instância de `UnitOfWork` a partir de uma `DatabaseConnection`.
+    /// Creates a `UnitOfWork` from a `DatabaseConnection`.
     pub fn from_connection(db: &DatabaseConnection) -> Self {
         Self {
             pool: db.pool().clone(),
@@ -55,32 +59,25 @@ impl UnitOfWork {
         }
     }
 
-    /// Retorna uma referência ao pool de conexões subjacente.
+    /// Returns a reference to the underlying connection pool.
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
 
-    /// Inicia uma nova transação no PostgreSQL.
-    pub async fn begin(&self) -> Result<Transaction<'static, Postgres>, DatabaseError> {
-        self.pool
-            .begin()
-            .await
-            .map_err(DatabaseError::ConnectionError)
-    }
-
-    /// Executa uma operação assíncrona dentro de um bloco transacional atômico.
+    /// Runs an asynchronous operation inside an atomic transaction.
     ///
-    /// Se a operação retornar `Ok(T)`, a transação é automaticamente confirmada (`commit`).
-    /// Se a operação retornar `Err(E)` ou ocorrer cancelamento, a transação é revertida (`rollback`).
-    pub async fn run_tx<F, Fut, T>(&self, operation: F) -> Result<T, BusinessError>
+    /// If the operation returns `Ok(T)`, the transaction is committed automatically.
+    /// If the operation returns `Err(E)` or is cancelled, the transaction is rolled back.
+    pub async fn transaction<F, T>(&self, operation: F) -> Result<T, BusinessError>
     where
-        F: FnOnce(Transaction<'static, Postgres>) -> Fut,
-        Fut: Future<Output = Result<(T, Transaction<'static, Postgres>), BusinessError>>,
+        F: for<'a> FnOnce(
+            &'a mut Transaction<'static, Postgres>,
+        ) -> TransactionOperationFuture<'a, T>,
     {
-        debug!("Iniciando transação na Unidade de Trabalho (Unit of Work)...");
+        debug!("Starting Unit of Work transaction...");
         let mut tx = self.pool.begin().await.map_err(|err| {
-            error!("Falha ao abrir transação no banco de dados: {:?}", err);
-            BusinessError::internal(format!("Falha ao abrir transação no banco de dados: {err}"))
+            error!("Failed to begin database transaction: {:?}", err);
+            BusinessError::internal(format!("Failed to begin database transaction: {err}"))
         })?;
 
         if let Some(schema) = &self.schema {
@@ -93,7 +90,7 @@ impl UnitOfWork {
             {
                 let _ = tx.rollback().await;
                 return Err(BusinessError::internal(format!(
-                    "Falha ao selecionar schema do tenant: {err}"
+                    "Failed to select tenant schema: {err}"
                 )));
             }
             let schema_exists: bool = match sqlx::query_scalar(
@@ -107,56 +104,35 @@ impl UnitOfWork {
                 Err(err) => {
                     let _ = tx.rollback().await;
                     return Err(BusinessError::internal(format!(
-                        "Falha ao validar schema do tenant: {err}"
+                        "Failed to validate tenant schema: {err}"
                     )));
                 }
             };
             if !schema_exists {
                 let _ = tx.rollback().await;
                 return Err(BusinessError::not_found(format!(
-                    "Schema do tenant '{schema}' não encontrado"
+                    "Tenant schema '{schema}' not found"
                 )));
             }
         }
 
-        match operation(tx).await {
-            Ok((result, tx)) => {
-                debug!("Confirmando (commit) transação da Unidade de Trabalho...");
+        match operation(&mut tx).await {
+            Ok(result) => {
+                debug!("Committing Unit of Work transaction...");
                 tx.commit().await.map_err(|err| {
-                    error!("Falha ao confirmar (commit) transação: {:?}", err);
+                    error!("Failed to commit transaction: {:?}", err);
                     BusinessError::internal(format!(
-                        "Falha ao confirmar transação no banco de dados: {err}"
+                        "Failed to commit database transaction: {err}"
                     ))
                 })?;
-                debug!("Transação confirmada com sucesso.");
+                debug!("Transaction committed successfully.");
                 Ok(result)
             }
             Err(err) => {
                 // `Transaction` rolls back on drop when the operation fails.
-                debug!("Revertendo (rollback) transação devido a erro: {:?}", err);
+                debug!("Rolling back transaction due to error: {:?}", err);
                 Err(err)
             }
-        }
-    }
-
-    /// Executa uma operação assíncrona gerenciando a transação de forma opcional.
-    ///
-    /// Se `uow` for `Some(&UnitOfWork)`, a operação é executada dentro de uma transação via `run_tx`.
-    /// Se `uow` for `None`, a operação é executada diretamente fora de uma transação.
-    pub async fn execute_maybe_tx<F, Fut, T>(
-        uow: Option<&UnitOfWork>,
-        operation: F,
-    ) -> Result<T, BusinessError>
-    where
-        F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<T, BusinessError>> + 'static,
-    {
-        match uow {
-            Some(u) => {
-                u.run_tx(|tx| async move { Ok((operation().await?, tx)) })
-                    .await
-            }
-            None => operation().await,
         }
     }
 }
@@ -197,13 +173,5 @@ mod tests {
 
         let uow_from_pool: UnitOfWork = db.pool().clone().into();
         assert!(!uow_from_pool.pool().is_closed());
-    }
-
-    #[tokio::test]
-    async fn test_unit_of_work_execute_maybe_tx_none() {
-        let result: Result<&str, BusinessError> =
-            UnitOfWork::execute_maybe_tx(None, || async { Ok("success_without_uow") }).await;
-
-        assert_eq!(result.unwrap(), "success_without_uow");
     }
 }

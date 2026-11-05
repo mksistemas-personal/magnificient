@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tsid::TSID;
 
-/// Implementação em memória do repositório de `Organization`, ideal para testes unitários.
+/// In-memory implementation of the `Organization` repository, suitable for unit tests.
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryOrganizationRepository {
     items: Arc<RwLock<HashMap<OrganizationId, Organization>>>,

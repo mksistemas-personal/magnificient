@@ -20,7 +20,7 @@ impl fmt::Display for AddressError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AddressError::EmptyField(field) => {
-                write!(f, "O campo '{field}' é obrigatório e não pode ser vazio")
+                write!(f, "Field '{field}' is required and cannot be empty")
             }
             AddressError::InvalidPostalCode {
                 country,
@@ -29,17 +29,17 @@ impl fmt::Display for AddressError {
             } => {
                 write!(
                     f,
-                    "Código postal inválido para o país {country}: '{received}'. Esperado: {expected}"
+                    "Invalid postal code for country {country}: '{received}'. Expected: {expected}"
                 )
             }
             AddressError::InvalidStateCode { country, received } => {
                 write!(
                     f,
-                    "Código de estado/província inválido para o país {country}: '{received}'"
+                    "Invalid state/province code for country {country}: '{received}'"
                 )
             }
             AddressError::InvalidCountryCode(code) => {
-                write!(f, "Código de país inválido: '{code}'")
+                write!(f, "Invalid country code: '{code}'")
             }
             AddressError::Custom(msg) => write!(f, "{msg}"),
         }

@@ -225,7 +225,7 @@ mod tests {
             "São Paulo",
             "São Paulo",
             "SP",
-            "123", // CEP inválido (menos de 8 dígitos)
+            "123", // Invalid postal code (fewer than 8 digits)
             "Brasil",
             "BR",
             "",

@@ -10,11 +10,11 @@ use tsid::{TSID, create_tsid};
 /// Trait que define o contrato de persistência para a entidade `Address`.
 #[async_trait]
 pub trait AddressRepository: Send + Sync {
-    /// Salva ou insere um endereço na base de dados.
-    /// Caso o endereço não possua um id, um novo identificador TSID será gerado.
+    /// Saves or inserts an address in the database.
+    /// Generates a new TSID if the address does not have an ID.
     async fn save(&self, address: &Address) -> Result<Address, BusinessError>;
 
-    /// Salva um endereço associado explicitamente a um identificador TSID e dados de auditoria opcionais.
+    /// Saves an address with an explicit TSID and optional audit fields.
     async fn save_with_id(
         &self,
         id: TSID,
@@ -22,10 +22,10 @@ pub trait AddressRepository: Send + Sync {
         audit: Option<&AuditFields>,
     ) -> Result<Address, BusinessError>;
 
-    /// Busca um endereço pelo seu identificador TSID.
+    /// Finds an address by its TSID.
     async fn find_by_id(&self, id: TSID) -> Result<Address, BusinessError>;
 
-    /// Remove logicamente um endereço pelo seu identificador TSID.
+    /// Soft-deletes an address by its TSID.
     async fn delete(&self, id: TSID, updated_by: &str) -> Result<(), BusinessError>;
 
     async fn save_in_tx(
@@ -35,7 +35,7 @@ pub trait AddressRepository: Send + Sync {
     ) -> Result<Address, BusinessError>;
 }
 
-/// Implementação em memória do repositório de `Address`, ideal para testes unitários e de integração.
+/// In-memory implementation of the `Address` repository, suitable for unit and integration tests.
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryAddressRepository {
     items: Arc<RwLock<HashMap<TSID, Address>>>,
@@ -111,7 +111,7 @@ impl AddressRepository for InMemoryAddressRepository {
     async fn find_by_id(&self, id: TSID) -> Result<Address, BusinessError> {
         let map = self.items.read().unwrap();
         map.get(&id).cloned().ok_or_else(|| {
-            BusinessError::not_found(format!("Endereço não encontrado para o ID: {id}"))
+            BusinessError::not_found(format!("Address not found for ID: {id}"))
         })
     }
 
@@ -119,14 +119,14 @@ impl AddressRepository for InMemoryAddressRepository {
         let mut map = self.items.write().unwrap();
         if map.remove(&id).is_none() {
             return Err(BusinessError::not_found(format!(
-                "Endereço não encontrado para remoção com ID: {id}"
+                "Address not found for deletion with ID: {id}"
             )));
         }
         Ok(())
     }
 }
 
-/// Representação de uma linha de endereço retornada pelo PostgreSQL.
+/// Represents an address row returned by PostgreSQL.
 #[derive(sqlx::FromRow)]
 struct AddressRow {
     id: i64,
@@ -172,7 +172,7 @@ impl From<AddressRow> for Address {
     }
 }
 
-/// Implementação do repositório de `Address` utilizando PostgreSQL e SQLx.
+/// PostgreSQL and SQLx implementation of the `Address` repository.
 #[derive(Debug, Clone)]
 pub struct PostgresAddressRepository {
     pool: PgPool,
@@ -297,8 +297,8 @@ impl PostgresAddressRepository {
             .execute(executor)
             .await
             .map_err(|err| {
-                error!("Erro ao salvar endereço no banco de dados: {:?}", err);
-                BusinessError::internal(format!("Falha ao persistir endereço: {err}"))
+                error!("Failed to save address to the database: {:?}", err);
+                BusinessError::internal(format!("Failed to persist address: {err}"))
             })?;
 
         let mut saved = address.clone();
@@ -331,13 +331,13 @@ impl PostgresAddressRepository {
             .fetch_optional(executor)
             .await
             .map_err(|err| {
-                error!("Falha ao buscar endereço pelo id {}: {:?}", id, err);
-                BusinessError::internal(format!("Falha ao consultar endereço: {err}"))
+                error!("Failed to fetch address by ID {}: {:?}", id, err);
+                BusinessError::internal(format!("Failed to query address: {err}"))
             })?;
 
         row_opt
             .map(Address::from)
-            .ok_or_else(|| BusinessError::not_found(format!("Endereço não encontrado para o ID: {id}")))
+            .ok_or_else(|| BusinessError::not_found(format!("Address not found for ID: {id}")))
     }
 
     async fn execute_delete<'e, E>(
@@ -366,15 +366,15 @@ impl PostgresAddressRepository {
             .await
             .map_err(|err| {
                 error!(
-                    "Erro ao remover logicamente endereço com ID {}: {:?}",
+                    "Failed to soft-delete address with ID {}: {:?}",
                     id, err
                 );
-                BusinessError::internal(format!("Falha ao remover endereço: {err}"))
+                BusinessError::internal(format!("Failed to delete address: {err}"))
             })?;
 
         if result.rows_affected() == 0 {
             return Err(BusinessError::not_found(format!(
-                "Endereço não encontrado para remoção com ID: {id}"
+                "Address not found for deletion with ID: {id}"
             )));
         }
 

@@ -28,7 +28,7 @@ async fn scoped_state(state: &AppState, tenant: &str) -> Result<AppState, ApiErr
         && !tenant.contains("--");
     if !tenant_valid {
         return Err(ApiError::BadRequest(
-            "Identificador de tenant inválido".into(),
+            "Invalid tenant identifier".into(),
         ));
     }
     let schema: Option<String> = sqlx::query_scalar(
@@ -37,8 +37,8 @@ async fn scoped_state(state: &AppState, tenant: &str) -> Result<AppState, ApiErr
     .bind(tenant)
     .fetch_optional(state.db.pool())
     .await
-    .map_err(|err| ApiError::Internal(format!("Falha ao resolver tenant: {err}")))?;
-    let schema = schema.ok_or_else(|| ApiError::NotFound("Tenant não encontrado".into()))?;
+    .map_err(|err| ApiError::Internal(format!("Failed to resolve tenant: {err}")))?;
+    let schema = schema.ok_or_else(|| ApiError::NotFound("Tenant not found".into()))?;
     state
         .for_tenant_schema(&schema, tenant)
         .map_err(ApiError::from)

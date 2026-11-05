@@ -35,32 +35,32 @@ impl Document {
         self.document_type.validate(&self.value)
     }
 
-    /// Retorna se o documento é válido
+    /// Returns whether the document is valid.
     pub fn is_valid(&self) -> bool {
         self.validate().is_ok()
     }
 
-    /// Retorna o valor do documento sanitizado (apenas números para documentos numéricos)
+    /// Returns the sanitized document value (digits only for numeric documents).
     pub fn sanitized_value(&self) -> String {
         self.document_type.sanitize(&self.value)
     }
 
-    /// Retorna o valor formatado com a pontuação padrão do documento
+    /// Returns the document value formatted with its standard punctuation.
     pub fn formatted(&self) -> String {
         self.document_type.format(&self.value)
     }
 
-    /// Retorna o país de origem do documento, se aplicável
+    /// Returns the document country, if applicable.
     pub fn country(&self) -> Option<Country> {
         self.document_type.country()
     }
 
-    /// Retorna uma referência ao tipo do documento
+    /// Returns a reference to the document type.
     pub fn document_type(&self) -> &DocumentType {
         &self.document_type
     }
 
-    /// Retorna uma referência ao valor bruto do documento
+    /// Returns a reference to the raw document value.
     pub fn value(&self) -> &str {
         &self.value
     }

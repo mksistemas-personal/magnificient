@@ -115,7 +115,7 @@ impl Address {
         self
     }
 
-    /// Retorna o validador adequado baseado no código ou nome do país
+    /// Returns the appropriate validator for the country code or name.
     pub fn validator(&self) -> Box<dyn AddressValidator> {
         if !self.country_code.trim().is_empty() {
             validator_for_country(&self.country_code)
@@ -124,22 +124,22 @@ impl Address {
         }
     }
 
-    /// Executa as regras de validação para o endereço
+    /// Runs the address validation rules.
     pub fn validate(&self) -> Result<(), AddressError> {
         self.validator().validate(self)
     }
 
-    /// Retorna se o endereço é válido
+    /// Returns whether the address is valid.
     pub fn is_valid(&self) -> bool {
         self.validate().is_ok()
     }
 
-    /// Retorna o código postal sanitizado conforme o padrão do país
+    /// Returns the postal code sanitized according to the country format.
     pub fn sanitized_postal_code(&self) -> String {
         self.validator().sanitize_postal_code(&self.postal_code)
     }
 
-    /// Retorna o código postal formatado conforme o padrão do país
+    /// Returns the postal code formatted according to the country format.
     pub fn formatted_postal_code(&self) -> String {
         self.validator().format_postal_code(&self.postal_code)
     }

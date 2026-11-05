@@ -6,7 +6,7 @@ pub trait UseCase<Request, Response> {
     fn execute(&self, request: Request) -> Response;
 }
 
-/// Trait para casos de uso síncronos de criação/adição de entidades que retornam `Result<Response, BusinessError>`.
+/// Trait for synchronous entity creation use cases returning `Result<Response, BusinessError>`.
 pub trait AddEntityUseCase<Request, Response> {
     fn execute(&self, request: Request) -> Result<Response, BusinessError>;
 }
@@ -17,7 +17,7 @@ pub trait AsyncUseCase<Request, Response>: Send + Sync {
     async fn execute(&self, request: Request) -> Response;
 }
 
-/// Trait para casos de uso assíncronos de criação/adição de entidades que retornam `Result<Response, BusinessError>`.
+/// Trait for asynchronous entity creation use cases returning `Result<Response, BusinessError>`.
 #[async_trait]
 pub trait AsyncAddEntityUseCase<Request, Response>: Send + Sync {
     async fn execute(&self, request: Request) -> Result<Response, BusinessError>;
@@ -28,7 +28,7 @@ pub trait AsyncUpdateEntityUseCase<Request, Response>: Send + Sync {
     async fn execute(&self, request: Request) -> Result<Response, BusinessError>;
 }
 
-/// Trait para casos de uso assíncronos de exclusão de entidades que retornam `Result<Response, BusinessError>`.
+/// Trait for asynchronous entity deletion use cases returning `Result<Response, BusinessError>`.
 #[async_trait]
 pub trait AsyncDeleteEntityUseCase<Request, Response = ()>: Send + Sync {
     async fn execute(&self, request: Request) -> Result<Response, BusinessError>;

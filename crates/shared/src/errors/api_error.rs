@@ -124,7 +124,7 @@ mod tests {
         let api_err: ApiError = not_allowed.into();
         assert_eq!(api_err.status_code(), StatusCode::FORBIDDEN);
 
-        let internal = BusinessError::internal("Falha de IO");
+        let internal = BusinessError::internal("I/O failure");
         let api_err: ApiError = internal.into();
         assert_eq!(api_err.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
     }

@@ -20,7 +20,7 @@ pub struct UnitOfWork {
 }
 
 impl UnitOfWork {
-    /// Cria uma nova instância de `UnitOfWork` a partir de um `PgPool`.
+    /// Creates a `UnitOfWork` from a `PgPool`.
     pub fn new(pool: PgPool) -> Self {
         Self { pool, schema: None }
     }
@@ -51,7 +51,7 @@ impl UnitOfWork {
         self.schema.as_deref()
     }
 
-    /// Cria uma nova instância de `UnitOfWork` a partir de uma `DatabaseConnection`.
+    /// Creates a `UnitOfWork` from a `DatabaseConnection`.
     pub fn from_connection(db: &DatabaseConnection) -> Self {
         Self {
             pool: db.pool().clone(),
@@ -59,25 +59,25 @@ impl UnitOfWork {
         }
     }
 
-    /// Retorna uma referência ao pool de conexões subjacente.
+    /// Returns a reference to the underlying connection pool.
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
 
-    /// Executa uma operação assíncrona dentro de um bloco transacional atômico.
+    /// Runs an asynchronous operation inside an atomic transaction.
     ///
-    /// Se a operação retornar `Ok(T)`, a transação é automaticamente confirmada (`commit`).
-    /// Se a operação retornar `Err(E)` ou ocorrer cancelamento, a transação é revertida (`rollback`).
+    /// If the operation returns `Ok(T)`, the transaction is committed automatically.
+    /// If the operation returns `Err(E)` or is cancelled, the transaction is rolled back.
     pub async fn transaction<F, T>(&self, operation: F) -> Result<T, BusinessError>
     where
         F: for<'a> FnOnce(
             &'a mut Transaction<'static, Postgres>,
         ) -> TransactionOperationFuture<'a, T>,
     {
-        debug!("Iniciando transação na Unidade de Trabalho (Unit of Work)...");
+        debug!("Starting Unit of Work transaction...");
         let mut tx = self.pool.begin().await.map_err(|err| {
-            error!("Falha ao abrir transação no banco de dados: {:?}", err);
-            BusinessError::internal(format!("Falha ao abrir transação no banco de dados: {err}"))
+            error!("Failed to begin database transaction: {:?}", err);
+            BusinessError::internal(format!("Failed to begin database transaction: {err}"))
         })?;
 
         if let Some(schema) = &self.schema {
@@ -90,7 +90,7 @@ impl UnitOfWork {
             {
                 let _ = tx.rollback().await;
                 return Err(BusinessError::internal(format!(
-                    "Falha ao selecionar schema do tenant: {err}"
+                    "Failed to select tenant schema: {err}"
                 )));
             }
             let schema_exists: bool = match sqlx::query_scalar(
@@ -104,33 +104,33 @@ impl UnitOfWork {
                 Err(err) => {
                     let _ = tx.rollback().await;
                     return Err(BusinessError::internal(format!(
-                        "Falha ao validar schema do tenant: {err}"
+                        "Failed to validate tenant schema: {err}"
                     )));
                 }
             };
             if !schema_exists {
                 let _ = tx.rollback().await;
                 return Err(BusinessError::not_found(format!(
-                    "Schema do tenant '{schema}' não encontrado"
+                    "Tenant schema '{schema}' not found"
                 )));
             }
         }
 
         match operation(&mut tx).await {
             Ok(result) => {
-                debug!("Confirmando (commit) transação da Unidade de Trabalho...");
+                debug!("Committing Unit of Work transaction...");
                 tx.commit().await.map_err(|err| {
-                    error!("Falha ao confirmar (commit) transação: {:?}", err);
+                    error!("Failed to commit transaction: {:?}", err);
                     BusinessError::internal(format!(
-                        "Falha ao confirmar transação no banco de dados: {err}"
+                        "Failed to commit database transaction: {err}"
                     ))
                 })?;
-                debug!("Transação confirmada com sucesso.");
+                debug!("Transaction committed successfully.");
                 Ok(result)
             }
             Err(err) => {
                 // `Transaction` rolls back on drop when the operation fails.
-                debug!("Revertendo (rollback) transação devido a erro: {:?}", err);
+                debug!("Rolling back transaction due to error: {:?}", err);
                 Err(err)
             }
         }

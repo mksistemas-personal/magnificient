@@ -61,13 +61,13 @@ impl AddressValidator for BrazilAddressValidator {
             });
         }
 
-        // Validação do CEP (deve ter 8 dígitos)
+        // Validate the postal code (it must contain 8 digits).
         let digits = self.sanitize_postal_code(&address.postal_code);
         if digits.len() != 8 {
             return Err(AddressError::InvalidPostalCode {
                 country: "BR".to_string(),
                 received: address.postal_code.clone(),
-                expected: "8 dígitos numéricos (ex: 01310-100 ou 01310100)",
+                expected: "8 numeric digits (e.g., 01310-100 ou 01310100)",
             });
         }
 
@@ -116,8 +116,8 @@ impl AddressValidator for ArgentinaAddressValidator {
         }
 
         // Código postal argentino:
-        // Tradicional: 4 dígitos (ex: "1000" a "9999")
-        // Novo formato CPA: 1 letra (província) + 4 dígitos + 3 letras (ex: "C1024CWN")
+        // Traditional format: 4 digits (e.g., "1000" to "9999").
+        // New CPA format: 1 letter (province) + 4 digits + 3 letters (e.g., "C1024CWN").
         let is_traditional = postal.len() == 4 && postal.chars().all(|c| c.is_ascii_digit());
         let is_cpa = postal.len() == 8
             && postal.chars().nth(0).is_some_and(|c| c.is_ascii_alphabetic())
@@ -128,7 +128,7 @@ impl AddressValidator for ArgentinaAddressValidator {
             return Err(AddressError::InvalidPostalCode {
                 country: "AR".to_string(),
                 received: address.postal_code.clone(),
-                expected: "4 dígitos numéricos (ex: 1425) ou CPA de 8 caracteres (ex: C1024CWN)",
+                expected: "4 numeric digits (e.g., 1425) or an 8-character CPA (e.g., C1024CWN)",
             });
         }
 
@@ -189,7 +189,7 @@ impl AddressValidator for UnitedStatesAddressValidator {
             return Err(AddressError::InvalidPostalCode {
                 country: "US".to_string(),
                 received: address.postal_code.clone(),
-                expected: "5 dígitos (ex: 90210) ou ZIP+4 (ex: 90210-1234)",
+                expected: "5 digits (e.g., 90210) or ZIP+4 (e.g., 90210-1234)",
             });
         }
 
@@ -238,7 +238,7 @@ impl AddressValidator for GenericAddressValidator {
     }
 }
 
-/// Retorna a instância adequada de `AddressValidator` baseada no código ou nome do país.
+/// Returns the appropriate `AddressValidator` for the country code or name.
 pub fn validator_for_country(country_code_or_name: &str) -> Box<dyn AddressValidator> {
     match country_code_or_name.trim().to_uppercase().as_str() {
         "BR" | "BRA" | "BRASIL" | "BRAZIL" => Box::new(BrazilAddressValidator),

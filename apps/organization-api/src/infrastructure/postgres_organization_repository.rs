@@ -105,12 +105,12 @@ impl TryFrom<OrganizationRow> for Organization {
 fn required_address_field<T>(value: Option<T>, field: &str) -> Result<T, BusinessError> {
     value.ok_or_else(|| {
         BusinessError::internal(format!(
-            "Campo obrigatório ausente no endereço associado: {field}"
+            "Required field missing from associated address: {field}"
         ))
     })
 }
 
-/// Implementação do repositório de `Organization` utilizando PostgreSQL e SQLx.
+/// PostgreSQL and SQLx implementation of the `Organization` repository.
 #[derive(Debug, Clone)]
 pub struct PostgresOrganizationRepository {
     pool: PgPool,
@@ -129,7 +129,7 @@ impl PostgresOrganizationRepository {
         }
     }
 
-    /// Retorna uma referência ao pool de conexões subjacente.
+    /// Returns a reference to the underlying connection pool.
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
@@ -203,8 +203,8 @@ impl PostgresOrganizationRepository {
                         return OrganizationBusinessErrors::document_already_in_use();
                     }
                 }
-                error!("Erro ao salvar organização no banco de dados: {:?}", err);
-                BusinessError::internal(format!("Falha ao persistir organização: {err}"))
+                error!("Failed to save organization to the database: {:?}", err);
+                BusinessError::internal(format!("Failed to persist organization: {err}"))
             })?;
 
         Ok(organization.clone())
@@ -224,8 +224,8 @@ impl PostgresOrganizationRepository {
             .fetch_optional(executor)
             .await
             .map_err(|err| {
-                error!("Fail to get organization by id {}: {:?}", id, err);
-                BusinessError::internal(format!("Falha ao consultar organização: {err}"))
+                error!("Failed to fetch organization by ID {}: {:?}", id, err);
+                BusinessError::internal(format!("Failed to query organization: {err}"))
             })?;
 
         let row = match row_opt {
@@ -260,8 +260,8 @@ impl PostgresOrganizationRepository {
             .execute(executor)
             .await
             .map_err(|err| {
-                error!("Fail to delete organization by id {}: {:?}", id, err);
-                BusinessError::internal(format!("Falha ao deletar organização: {err}"))
+                error!("Failed to delete organization by ID {}: {:?}", id, err);
+                BusinessError::internal(format!("Failed to delete organization: {err}"))
             })?;
 
         if result.rows_affected() == 0 {
@@ -300,8 +300,8 @@ impl PostgresOrganizationRepository {
             .fetch_all(executor)
             .await
             .map_err(|err| {
-                error!("Fail to list organizations: {:?}", err);
-                BusinessError::internal(format!("Falha ao consultar organizações: {err}"))
+                error!("Failed to list organizations: {:?}", err);
+                BusinessError::internal(format!("Failed to query organizations: {err}"))
             })?;
 
         rows.into_iter().map(TryInto::try_into).collect()
@@ -328,7 +328,7 @@ impl PostgresOrganizationRepository {
 
         let total = count_res.map_err(|err| {
             error!("Fail to count organizations: {:?}", err);
-            BusinessError::internal(format!("Falha ao contar organizações: {err}"))
+            BusinessError::internal(format!("Failed to count organizations: {err}"))
         })?;
 
         Ok(total as u64)

@@ -1,4 +1,4 @@
-// Configurações da API de Organização
+// Organization API configuration.
 
 #[path = "organization-config.rs"]
 pub mod organization_config;

@@ -2,14 +2,14 @@ use std::future::Future;
 
 /// Extension trait para encadear operações assíncronas em um `Result` no estilo Railway Oriented Programming (ROP).
 pub trait AsyncResultExt<T, E> {
-    /// Encadeia uma operação assíncrona sobre o valor de sucesso de um `Result`.
+    /// Chains an asynchronous operation on the success value of a `Result`.
     /// Se o `Result` for `Err`, a operação assíncrona não é executada e o erro é propagado.
     fn and_then_async<F, Fut, U>(self, op: F) -> impl Future<Output = Result<U, E>>
     where
         F: FnOnce(T) -> Fut,
         Fut: Future<Output = Result<U, E>>;
 
-    /// Aplica uma transformação assíncrona sobre o valor de sucesso de um `Result`.
+    /// Applies an asynchronous transformation to the success value of a `Result`.
     /// Se o `Result` for `Err`, a operação assíncrona não é executada e o erro é propagado.
     fn map_async<F, Fut, U>(self, op: F) -> impl Future<Output = Result<U, E>>
     where

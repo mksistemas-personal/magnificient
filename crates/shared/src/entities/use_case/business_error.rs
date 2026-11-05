@@ -1,25 +1,25 @@
 use std::fmt;
 use crate::errors::{AddressError, DocumentError, IdentifierError};
 
-/// Enum de erros de negócio para uso padronizado em casos de uso (Use Cases).
+/// Business error types used consistently across use cases.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BusinessError {
-    /// Entidade ou recurso não encontrado
+    /// Entity or resource was not found.
     NotFound(String),
 
-    /// Entidade ou recurso já existente / conflito
+    /// Entity or resource already exists / conflict.
     AlreadyExists(String),
 
-    /// Dados de entrada inválidos ou inconsistentes
+    /// Input data is invalid or inconsistent.
     InvalidData(String),
 
-    /// Falha de regra de validação de negócio
+    /// A business validation rule failed.
     Validation(String),
 
-    /// Ação não permitida ou operação não autorizada pelas regras de negócio
+    /// Action is not allowed or is unauthorized by business rules.
     NotAllowed(String),
 
-    /// Erro interno de execução
+    /// Internal execution error.
     Internal(String),
 }
 
@@ -63,12 +63,12 @@ impl BusinessError {
 impl fmt::Display for BusinessError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BusinessError::NotFound(msg) => write!(f, "Não encontrado: {msg}"),
-            BusinessError::AlreadyExists(msg) => write!(f, "Já existe: {msg}"),
-            BusinessError::InvalidData(msg) => write!(f, "Dados inválidos: {msg}"),
-            BusinessError::Validation(msg) => write!(f, "Regra violada: {msg}"),
-            BusinessError::NotAllowed(msg) => write!(f, "Operação não permitida: {msg}"),
-            BusinessError::Internal(msg) => write!(f, "Erro interno: {msg}"),
+            BusinessError::NotFound(msg) => write!(f, "Not found: {msg}"),
+            BusinessError::AlreadyExists(msg) => write!(f, "Already exists: {msg}"),
+            BusinessError::InvalidData(msg) => write!(f, "Invalid data: {msg}"),
+            BusinessError::Validation(msg) => write!(f, "Validation failed: {msg}"),
+            BusinessError::NotAllowed(msg) => write!(f, "Operation not allowed: {msg}"),
+            BusinessError::Internal(msg) => write!(f, "Internal error: {msg}"),
         }
     }
 }
@@ -77,19 +77,19 @@ impl std::error::Error for BusinessError {}
 
 impl From<DocumentError> for BusinessError {
     fn from(err: DocumentError) -> Self {
-        BusinessError::InvalidData(format!("Documento inválido: {err}"))
+        BusinessError::InvalidData(format!("Invalid document: {err}"))
     }
 }
 
 impl From<AddressError> for BusinessError {
     fn from(err: AddressError) -> Self {
-        BusinessError::InvalidData(format!("Endereço inválido: {err}"))
+        BusinessError::InvalidData(format!("Invalid address: {err}"))
     }
 }
 
 impl From<IdentifierError> for BusinessError {
     fn from(err: IdentifierError) -> Self {
-        BusinessError::InvalidData(format!("Identificador inválido: {err}"))
+        BusinessError::InvalidData(format!("Invalid identifier: {err}"))
     }
 }
 
@@ -101,13 +101,13 @@ mod tests {
     fn test_business_error_constructors_and_display() {
         let err = BusinessError::not_found("Organização 123");
         assert_eq!(err.message(), "Organização 123");
-        assert_eq!(format!("{err}"), "Não encontrado: Organização 123");
+        assert_eq!(format!("{err}"), "Not found: Organização 123");
 
         let err = BusinessError::already_exists("CNPJ duplicado");
-        assert_eq!(format!("{err}"), "Já existe: CNPJ duplicado");
+        assert_eq!(format!("{err}"), "Already exists: CNPJ duplicado");
 
         let err = BusinessError::invalid_data("Campo vazio");
-        assert_eq!(format!("{err}"), "Dados inválidos: Campo vazio");
+        assert_eq!(format!("{err}"), "Invalid data: Campo vazio");
     }
 
     #[test]

@@ -67,10 +67,10 @@ mod tests {
         let formatted = format!("{prod_id}");
         assert_eq!(formatted, tsid.to_string());
 
-        let parsed: EntityTestId = formatted.parse().expect("Deveria converter com sucesso");
+        let parsed: EntityTestId = formatted.parse().expect("Expected conversion to succeed");
         assert_eq!(parsed, prod_id);
 
-        let parsed_numeric: EntityTestId = "987654321".parse().expect("Deveria converter numérico");
+        let parsed_numeric: EntityTestId = "987654321".parse().expect("Expected numeric conversion to succeed");
         assert_eq!(parsed_numeric, prod_id);
 
         let invalid_parse: Result<EntityTestId, _> = "invalid-tsid!".parse();

@@ -28,7 +28,7 @@ impl MessagePublisher for RabbitMqPublisher {
         self.client
             .publish_json(exchange, routing_key, message, headers)
             .await
-            .map_err(|e| BusinessError::Internal(format!("Erro ao publicar mensagem: {}", e)))
+            .map_err(|e| BusinessError::Internal(format!("Failed to publish message: {}", e)))
     }
 }
 

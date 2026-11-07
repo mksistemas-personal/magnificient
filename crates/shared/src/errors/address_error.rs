@@ -3,15 +3,8 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddressError {
     EmptyField(&'static str),
-    InvalidPostalCode {
-        country: String,
-        received: String,
-        expected: &'static str,
-    },
-    InvalidStateCode {
-        country: String,
-        received: String,
-    },
+    InvalidPostalCode {},
+    InvalidStateCode { country: String, received: String },
     InvalidCountryCode(String),
     Custom(String),
 }
@@ -20,26 +13,19 @@ impl fmt::Display for AddressError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AddressError::EmptyField(field) => {
-                write!(f, "Field '{field}' is required and cannot be empty")
+                write!(f, "address.field.required.{field}'")
             }
-            AddressError::InvalidPostalCode {
-                country,
-                received,
-                expected,
+            AddressError::InvalidPostalCode {} => {
+                write!(f, "address.invalid.postal.code")
+            }
+            AddressError::InvalidStateCode {
+                country: _,
+                received: _,
             } => {
-                write!(
-                    f,
-                    "Invalid postal code for country {country}: '{received}'. Expected: {expected}"
-                )
+                write!(f, "address.invalid.state.province")
             }
-            AddressError::InvalidStateCode { country, received } => {
-                write!(
-                    f,
-                    "Invalid state/province code for country {country}: '{received}'"
-                )
-            }
-            AddressError::InvalidCountryCode(code) => {
-                write!(f, "Invalid country code: '{code}'")
+            AddressError::InvalidCountryCode(_) => {
+                write!(f, "address.invalid.country.code")
             }
             AddressError::Custom(msg) => write!(f, "{msg}"),
         }

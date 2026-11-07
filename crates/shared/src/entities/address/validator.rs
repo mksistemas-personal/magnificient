@@ -1,4 +1,5 @@
 use crate::entities::address::Address;
+use crate::entities::address::errors::AddressBusinessErrors;
 use crate::errors::AddressError;
 
 pub trait AddressValidator: Send + Sync {
@@ -26,8 +27,8 @@ pub fn sanitize_digits(val: &str) -> String {
 // ==========================================
 
 const BRAZIL_VALID_UFS: [&str; 27] = [
-    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB",
-    "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR",
+    "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
 ];
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -36,39 +37,35 @@ pub struct BrazilAddressValidator;
 impl AddressValidator for BrazilAddressValidator {
     fn validate(&self, address: &Address) -> Result<(), AddressError> {
         if is_blank(&address.street) {
-            return Err(AddressError::EmptyField("street"));
+            return Err(AddressBusinessErrors::empty_street());
         }
         if is_blank(&address.number) {
-            return Err(AddressError::EmptyField("number"));
+            return Err(AddressBusinessErrors::empty_number());
         }
         if is_blank(&address.neighborhood) {
-            return Err(AddressError::EmptyField("neighborhood"));
+            return Err(AddressBusinessErrors::empty_neighborhood());
         }
         if is_blank(&address.city) {
-            return Err(AddressError::EmptyField("city"));
+            return Err(AddressBusinessErrors::empty_city());
         }
 
         // Validação do Estado / UF
         let uf = address.state_code.trim().to_uppercase();
         if uf.is_empty() {
             if is_blank(&address.state) {
-                return Err(AddressError::EmptyField("state_code"));
+                return Err(AddressBusinessErrors::empty_state_code());
             }
         } else if !BRAZIL_VALID_UFS.contains(&uf.as_str()) {
-            return Err(AddressError::InvalidStateCode {
-                country: "BR".to_string(),
-                received: address.state_code.clone(),
-            });
+            return Err(AddressBusinessErrors::invalid_state_code(
+                "BR",
+                &address.state_code,
+            ));
         }
 
         // Validate the postal code (it must contain 8 digits).
         let digits = self.sanitize_postal_code(&address.postal_code);
         if digits.len() != 8 {
-            return Err(AddressError::InvalidPostalCode {
-                country: "BR".to_string(),
-                received: address.postal_code.clone(),
-                expected: "8 numeric digits (e.g., 01310-100 ou 01310100)",
-            });
+            return Err(AddressBusinessErrors::invalid_postal_code_br());
         }
 
         Ok(())
@@ -98,21 +95,21 @@ pub struct ArgentinaAddressValidator;
 impl AddressValidator for ArgentinaAddressValidator {
     fn validate(&self, address: &Address) -> Result<(), AddressError> {
         if is_blank(&address.street) {
-            return Err(AddressError::EmptyField("street"));
+            return Err(AddressBusinessErrors::empty_street());
         }
         if is_blank(&address.number) {
-            return Err(AddressError::EmptyField("number"));
+            return Err(AddressBusinessErrors::empty_number());
         }
         if is_blank(&address.city) {
-            return Err(AddressError::EmptyField("city"));
+            return Err(AddressBusinessErrors::empty_city());
         }
         if is_blank(&address.state) && is_blank(&address.state_code) {
-            return Err(AddressError::EmptyField("state"));
+            return Err(AddressBusinessErrors::empty_state());
         }
 
         let postal = address.postal_code.trim();
         if postal.is_empty() {
-            return Err(AddressError::EmptyField("postal_code"));
+            return Err(AddressBusinessErrors::empty_postal_code());
         }
 
         // Código postal argentino:
@@ -120,16 +117,15 @@ impl AddressValidator for ArgentinaAddressValidator {
         // New CPA format: 1 letter (province) + 4 digits + 3 letters (e.g., "C1024CWN").
         let is_traditional = postal.len() == 4 && postal.chars().all(|c| c.is_ascii_digit());
         let is_cpa = postal.len() == 8
-            && postal.chars().nth(0).is_some_and(|c| c.is_ascii_alphabetic())
+            && postal
+                .chars()
+                .nth(0)
+                .is_some_and(|c| c.is_ascii_alphabetic())
             && postal[1..5].chars().all(|c| c.is_ascii_digit())
             && postal[5..8].chars().all(|c| c.is_ascii_alphabetic());
 
         if !is_traditional && !is_cpa {
-            return Err(AddressError::InvalidPostalCode {
-                country: "AR".to_string(),
-                received: address.postal_code.clone(),
-                expected: "4 numeric digits (e.g., 1425) or an 8-character CPA (e.g., C1024CWN)",
-            });
+            return Err(AddressBusinessErrors::invalid_postal_code_ar());
         }
 
         Ok(())
@@ -154,10 +150,10 @@ impl AddressValidator for ArgentinaAddressValidator {
 // ==========================================
 
 const US_VALID_STATES: [&str; 56] = [
-    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA",
-    "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
-    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT",
-    "VA", "WA", "WV", "WI", "WY", "DC", "PR", "VI", "GU", "AS", "MP",
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS",
+    "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY",
+    "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV",
+    "WI", "WY", "DC", "PR", "VI", "GU", "AS", "MP",
 ];
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -166,31 +162,27 @@ pub struct UnitedStatesAddressValidator;
 impl AddressValidator for UnitedStatesAddressValidator {
     fn validate(&self, address: &Address) -> Result<(), AddressError> {
         if is_blank(&address.street) {
-            return Err(AddressError::EmptyField("street"));
+            return Err(AddressBusinessErrors::empty_street());
         }
         if is_blank(&address.city) {
-            return Err(AddressError::EmptyField("city"));
+            return Err(AddressBusinessErrors::empty_city());
         }
 
         let state = address.state_code.trim().to_uppercase();
         if state.is_empty() {
             if is_blank(&address.state) {
-                return Err(AddressError::EmptyField("state_code"));
+                return Err(AddressBusinessErrors::empty_state_code());
             }
         } else if !US_VALID_STATES.contains(&state.as_str()) {
-            return Err(AddressError::InvalidStateCode {
-                country: "US".to_string(),
-                received: address.state_code.clone(),
-            });
+            return Err(AddressBusinessErrors::invalid_state_code(
+                "US",
+                &address.state_code,
+            ));
         }
 
         let digits = self.sanitize_postal_code(&address.postal_code);
         if digits.len() != 5 && digits.len() != 9 {
-            return Err(AddressError::InvalidPostalCode {
-                country: "US".to_string(),
-                received: address.postal_code.clone(),
-                expected: "5 digits (e.g., 90210) or ZIP+4 (e.g., 90210-1234)",
-            });
+            return Err(AddressBusinessErrors::invalid_postal_code_us());
         }
 
         Ok(())
@@ -222,16 +214,16 @@ pub struct GenericAddressValidator;
 impl AddressValidator for GenericAddressValidator {
     fn validate(&self, address: &Address) -> Result<(), AddressError> {
         if is_blank(&address.street) {
-            return Err(AddressError::EmptyField("street"));
+            return Err(AddressBusinessErrors::empty_street());
         }
         if is_blank(&address.city) {
-            return Err(AddressError::EmptyField("city"));
+            return Err(AddressBusinessErrors::empty_city());
         }
         if is_blank(&address.postal_code) {
-            return Err(AddressError::EmptyField("postal_code"));
+            return Err(AddressBusinessErrors::empty_postal_code());
         }
         if is_blank(&address.country_code) && is_blank(&address.country) {
-            return Err(AddressError::EmptyField("country_code"));
+            return Err(AddressBusinessErrors::empty_country_code());
         }
 
         Ok(())
@@ -243,9 +235,7 @@ pub fn validator_for_country(country_code_or_name: &str) -> Box<dyn AddressValid
     match country_code_or_name.trim().to_uppercase().as_str() {
         "BR" | "BRA" | "BRASIL" | "BRAZIL" => Box::new(BrazilAddressValidator),
         "AR" | "ARG" | "ARGENTINA" => Box::new(ArgentinaAddressValidator),
-        "US" | "USA" | "UNITED STATES" | "ESTADOS UNIDOS" => {
-            Box::new(UnitedStatesAddressValidator)
-        }
+        "US" | "USA" | "UNITED STATES" | "ESTADOS UNIDOS" => Box::new(UnitedStatesAddressValidator),
         _ => Box::new(GenericAddressValidator),
     }
 }
@@ -271,7 +261,10 @@ mod tests {
             "",
         );
         assert!(validator.validate(&address).is_ok());
-        assert_eq!(validator.sanitize_postal_code(&address.postal_code), "01310100");
+        assert_eq!(
+            validator.sanitize_postal_code(&address.postal_code),
+            "01310100"
+        );
         assert_eq!(validator.format_postal_code("01310100"), "01310-100");
     }
 
@@ -291,24 +284,30 @@ mod tests {
             "BR",
             "",
         );
-        assert_eq!(validator.validate(&address), Err(AddressError::EmptyField("street")));
+        assert_eq!(
+            validator.validate(&address),
+            Err(AddressBusinessErrors::empty_street())
+        );
 
         address.street = "Rua A".to_string();
         address.number = "   ".to_string();
-        assert_eq!(validator.validate(&address), Err(AddressError::EmptyField("number")));
+        assert_eq!(
+            validator.validate(&address),
+            Err(AddressBusinessErrors::empty_number())
+        );
 
         address.number = "10".to_string();
         address.neighborhood = "".to_string();
-        assert_eq!(validator.validate(&address), Err(AddressError::EmptyField("neighborhood")));
+        assert_eq!(
+            validator.validate(&address),
+            Err(AddressBusinessErrors::empty_neighborhood())
+        );
 
         address.neighborhood = "Centro".to_string();
         address.state_code = "XX".to_string();
         assert_eq!(
             validator.validate(&address),
-            Err(AddressError::InvalidStateCode {
-                country: "BR".to_string(),
-                received: "XX".to_string()
-            })
+            Err(AddressBusinessErrors::invalid_state_code("BR", "XX"))
         );
 
         address.state_code = "SP".to_string();
@@ -420,10 +419,7 @@ mod tests {
         );
         assert_eq!(
             validator.validate(&invalid_state),
-            Err(AddressError::InvalidStateCode {
-                country: "US".to_string(),
-                received: "ZZ".to_string()
-            })
+            Err(AddressBusinessErrors::invalid_state_code("US", "ZZ"))
         );
     }
 
@@ -446,21 +442,11 @@ mod tests {
         assert!(validator.validate(&valid_address).is_ok());
 
         let invalid_address = Address::new(
-            "",
-            "",
-            "",
-            "",
-            "Madrid",
-            "Madrid",
-            "MD",
-            "28013",
-            "Espanha",
-            "ES",
-            "",
+            "", "", "", "", "Madrid", "Madrid", "MD", "28013", "Espanha", "ES", "",
         );
         assert_eq!(
             validator.validate(&invalid_address),
-            Err(AddressError::EmptyField("street"))
+            Err(AddressBusinessErrors::empty_street())
         );
     }
 

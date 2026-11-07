@@ -1,5 +1,5 @@
-use std::fmt;
 use crate::errors::{AddressError, DocumentError, IdentifierError};
+use std::fmt;
 
 /// Business error types used consistently across use cases.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,7 +83,7 @@ impl From<DocumentError> for BusinessError {
 
 impl From<AddressError> for BusinessError {
     fn from(err: AddressError) -> Self {
-        BusinessError::InvalidData(format!("Invalid address: {err}"))
+        BusinessError::InvalidData(err.to_string())
     }
 }
 

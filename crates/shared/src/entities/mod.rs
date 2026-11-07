@@ -7,7 +7,7 @@ pub mod identifier;
 pub mod use_case;
 
 pub use address::{
-    validator_for_country, Address, AddressRepository, AddressValidator,
+    validator_for_country, Address, AddressBusinessErrors, AddressRepository, AddressValidator,
     ArgentinaAddressValidator, BrazilAddressValidator, GenericAddressValidator,
     InMemoryAddressRepository, PostgresAddressRepository, UnitedStatesAddressValidator,
 };

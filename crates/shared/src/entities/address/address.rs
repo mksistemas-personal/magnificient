@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tsid::TSID;
 
-use crate::entities::address::validator::{validator_for_country, AddressValidator};
+use crate::entities::address::validator::{AddressValidator, validator_for_country};
 use crate::entities::audit::audit_fields::AuditFields;
 use crate::errors::AddressError;
 
@@ -216,6 +216,9 @@ mod tests {
             "BR",
             "",
         );
-        assert_eq!(result, Err(AddressError::EmptyField("street")));
+        assert_eq!(
+            result,
+            Err(crate::entities::address::AddressBusinessErrors::empty_street())
+        );
     }
 }

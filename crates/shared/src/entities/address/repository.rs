@@ -1,4 +1,5 @@
 use crate::entities::address::Address;
+use crate::entities::address::errors::AddressBusinessErrors;
 use crate::entities::{AuditFields, BusinessError};
 use async_trait::async_trait;
 use sqlx::PgPool;
@@ -80,15 +81,6 @@ impl AddressRepository for InMemoryAddressRepository {
         Ok(saved_address)
     }
 
-    async fn save_in_tx(
-        &self,
-        _conn: &mut sqlx::PgConnection,
-        address: &Address,
-    ) -> Result<Address, BusinessError> {
-        // The in-memory adapter has no database transaction or rollback semantics.
-        self.save(address).await
-    }
-
     async fn save_with_id(
         &self,
         id: TSID,
@@ -110,19 +102,26 @@ impl AddressRepository for InMemoryAddressRepository {
 
     async fn find_by_id(&self, id: TSID) -> Result<Address, BusinessError> {
         let map = self.items.read().unwrap();
-        map.get(&id).cloned().ok_or_else(|| {
-            BusinessError::not_found(format!("Address not found for ID: {id}"))
-        })
+        map.get(&id)
+            .cloned()
+            .ok_or_else(|| AddressBusinessErrors::not_found())
     }
 
     async fn delete(&self, id: TSID, _updated_by: &str) -> Result<(), BusinessError> {
         let mut map = self.items.write().unwrap();
         if map.remove(&id).is_none() {
-            return Err(BusinessError::not_found(format!(
-                "Address not found for deletion with ID: {id}"
-            )));
+            return Err(AddressBusinessErrors::not_found());
         }
         Ok(())
+    }
+
+    async fn save_in_tx(
+        &self,
+        _conn: &mut sqlx::PgConnection,
+        address: &Address,
+    ) -> Result<Address, BusinessError> {
+        // The in-memory adapter has no database transaction or rollback semantics.
+        self.save(address).await
     }
 }
 
@@ -298,7 +297,7 @@ impl PostgresAddressRepository {
             .await
             .map_err(|err| {
                 error!("Failed to save address to the database: {:?}", err);
-                BusinessError::internal(format!("Failed to persist address: {err}"))
+                AddressBusinessErrors::persist_failed()
             })?;
 
         let mut saved = address.clone();
@@ -332,12 +331,12 @@ impl PostgresAddressRepository {
             .await
             .map_err(|err| {
                 error!("Failed to fetch address by ID {}: {:?}", id, err);
-                BusinessError::internal(format!("Failed to query address: {err}"))
+                AddressBusinessErrors::query_failed()
             })?;
 
         row_opt
             .map(Address::from)
-            .ok_or_else(|| BusinessError::not_found(format!("Address not found for ID: {id}")))
+            .ok_or_else(|| AddressBusinessErrors::not_found())
     }
 
     async fn execute_delete<'e, E>(
@@ -365,17 +364,12 @@ impl PostgresAddressRepository {
             .execute(executor)
             .await
             .map_err(|err| {
-                error!(
-                    "Failed to soft-delete address with ID {}: {:?}",
-                    id, err
-                );
-                BusinessError::internal(format!("Failed to delete address: {err}"))
+                error!("Failed to soft-delete address with ID {}: {:?}", id, err);
+                AddressBusinessErrors::delete_failed()
             })?;
 
         if result.rows_affected() == 0 {
-            return Err(BusinessError::not_found(format!(
-                "Address not found for deletion with ID: {id}"
-            )));
+            return Err(AddressBusinessErrors::not_found());
         }
 
         Ok(())

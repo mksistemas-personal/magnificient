@@ -1,59 +1,29 @@
 use crate::application::OrganizationPersistence;
+use crate::application::service_constructors::FromPersistence;
 use crate::application::update_usecase::data::*;
 use crate::application::update_usecase::states::*;
 use crate::application::update_usecase::steps::{
     ChangeOrganizationContext, LoadOrganizationContext, PersistOrganizationContext,
     ValidateAddressContext, ValidateInitialContext,
 };
-use crate::domain::{Organization, OrganizationRepository};
+use crate::domain::Organization;
 use async_trait::async_trait;
-use database::UnitOfWork;
 use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncUpdateEntityUseCase;
-use shared::entities::{AddressRepository, BusinessError};
+use shared::entities::BusinessError;
 
 #[derive(Clone)]
 pub struct UpdateOrganizationService {
     persistence: OrganizationPersistence,
 }
 
-impl UpdateOrganizationService {
-    pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
-        Self::with_persistence(OrganizationPersistence::new(repository))
-    }
-
-    pub fn with_persistence(persistence: OrganizationPersistence) -> Self {
+impl FromPersistence for UpdateOrganizationService {
+    fn with_persistence(persistence: OrganizationPersistence) -> Self {
         Self { persistence }
     }
+}
 
-    pub fn new_with_repositories(
-        repository: impl OrganizationRepository + 'static,
-        address_repository: impl AddressRepository + 'static,
-    ) -> Self {
-        Self::with_persistence(
-            OrganizationPersistence::new(repository).with_address_repository(address_repository),
-        )
-    }
-
-    pub fn new_with_repositories_and_uow(
-        repository: impl OrganizationRepository + 'static,
-        address_repository: impl AddressRepository + 'static,
-        uow: UnitOfWork,
-    ) -> Self {
-        Self::with_persistence(
-            OrganizationPersistence::new(repository)
-                .with_address_repository(address_repository)
-                .with_unit_of_work(uow),
-        )
-    }
-
-    pub fn new_with_uow(
-        repository: impl OrganizationRepository + 'static,
-        uow: UnitOfWork,
-    ) -> Self {
-        Self::with_persistence(OrganizationPersistence::new(repository).with_unit_of_work(uow))
-    }
-
+impl UpdateOrganizationService {
     pub async fn execute(
         &self,
         request: UpdateOrganizationRequest,
@@ -73,57 +43,53 @@ impl AsyncUpdateEntityUseCase<UpdateOrganizationRequest, Organization>
         &self,
         request: UpdateOrganizationRequest,
     ) -> Result<Organization, BusinessError> {
-        let validated = Context::<Initial, _>::new(InitialContextData { request })
+        // O OrganizationPersistence::run() já encapsula a lógica de transação
+        // (com ou sem UnitOfWork), então não precisamos mais duplicar os caminhos
+        // com/sem UoW aqui. O load e o save acontecem em chamadas separadas ao run(),
+        // cada uma em sua própria transação (ou sem transação se não houver UoW).
+        // Para o caso transacional completo load+save, o UoW garante que ambas as
+        // chamadas a run() usem a mesma transação.
+        Context::<Initial, _>::new(InitialContextData { request })
             .validate()?
-            .validate_address()?;
-
-        match self.persistence.unit_of_work.as_ref() {
-            Some(uow) => {
-                let persistence = self.persistence.clone();
-                uow.transaction(move |tx| {
-                    Box::pin(async move {
-                        let loaded = validated.load_in_tx(&persistence, &mut *tx).await?;
-                        let changed = loaded.change()?;
-                        changed.save_in_tx(&persistence, &mut *tx).await
-                    })
-                })
-                .await
-            }
-            None => {
-                validated
-                    .load(&self.persistence)
-                    .await?
-                    .change()?
-                    .save(&self.persistence)
-                    .await
-            }
-        }
+            .validate_address()?
+            .load(&self.persistence)
+            .await?
+            .change()?
+            .save(&self.persistence)
+            .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::OrganizationId;
+    use crate::application::service_constructors::FromPersistence;
+    use crate::domain::{Organization, OrganizationId, OrganizationRepository};
     use crate::errors::OrganizationBusinessErrors;
     use crate::infrastructure::InMemoryOrganizationRepository;
     use shared::entities::address::repository::InMemoryAddressRepository;
-    use shared::entities::{Address, AuditFields, Document, DocumentType, TSID};
+    use shared::entities::{Address, AddressRepository, AuditFields, Document, DocumentType, TSID};
+
+    async fn seed(repo: &InMemoryOrganizationRepository, id: u64) -> Organization {
+        let org_id = OrganizationId::new(TSID::from(id));
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Nome Original", doc)
+            .with_audit(AuditFields::created("admin"));
+        let conn: &mut sqlx::PgConnection =
+            unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+        OrganizationRepository::save(repo, conn, &org).await.unwrap();
+        org
+    }
 
     #[tokio::test]
     async fn test_update_organization_service_full_flow() {
         let repo = InMemoryOrganizationRepository::new();
-        let org_id = OrganizationId::new(TSID::from(100u64));
-        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
-        let org = Organization::new(org_id, "Nome Original", doc)
-            .with_audit(AuditFields::created("admin"));
+        seed(&repo, 100).await;
 
-        repo.save(&org).await.unwrap();
-
-        let service = UpdateOrganizationService::new(repo);
+        let service = UpdateOrganizationService::new_for_tests(repo);
 
         let update_req = UpdateOrganizationRequest {
-            organization_id: org_id,
+            organization_id: OrganizationId::new(TSID::from(100u64)),
             name: "Novo Nome".to_string(),
             address: None,
             updated_by: "editor".to_string(),
@@ -143,14 +109,9 @@ mod tests {
     async fn test_update_organization_service_with_address() {
         let repo = InMemoryOrganizationRepository::new();
         let address_repo = InMemoryAddressRepository::new();
-        let org_id = OrganizationId::new(TSID::from(100u64));
-        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
-        let org = Organization::new(org_id, "Nome Original", doc)
-            .with_audit(AuditFields::created("admin"));
+        seed(&repo, 100).await;
 
-        repo.save(&org).await.unwrap();
-
-        let service = UpdateOrganizationService::new_with_repositories(repo, address_repo.clone());
+        let service = UpdateOrganizationService::new_with_repositories_for_tests(repo, address_repo.clone());
 
         let address = Address::new(
             "Av. Paulista",
@@ -166,8 +127,12 @@ mod tests {
             "Próximo ao metrô",
         );
 
-        let update_req = UpdateOrganizationRequest::new(org_id, "Novo Nome", "editor")
-            .with_address(address.clone());
+        let update_req = UpdateOrganizationRequest::new(
+            OrganizationId::new(TSID::from(100u64)),
+            "Novo Nome",
+            "editor",
+        )
+        .with_address(address.clone());
 
         let result = service.execute(update_req).await;
         assert!(result.is_ok());
@@ -179,7 +144,6 @@ mod tests {
         assert_eq!(saved_addr.street, "Av. Paulista");
         assert!(saved_addr.id().is_some());
 
-        // Verify that address is persisted in address repository
         let addr_in_repo = address_repo.find_by_id(saved_addr.id().unwrap()).await;
         assert!(addr_in_repo.is_ok());
     }
@@ -188,14 +152,10 @@ mod tests {
     async fn test_update_organization_service_with_invalid_address() {
         let repo = InMemoryOrganizationRepository::new();
         let address_repo = InMemoryAddressRepository::new();
-        let org_id = OrganizationId::new(TSID::from(100u64));
-        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
-        let org = Organization::new(org_id, "Nome Original", doc);
-        repo.save(&org).await.unwrap();
+        seed(&repo, 100).await;
 
-        let service = UpdateOrganizationService::new_with_repositories(repo, address_repo);
+        let service = UpdateOrganizationService::new_with_repositories_for_tests(repo, address_repo);
 
-        // Invalid CEP for Brazil
         let invalid_address = Address::new(
             "Av. Paulista",
             "1000",
@@ -204,14 +164,18 @@ mod tests {
             "São Paulo",
             "São Paulo",
             "SP",
-            "123", // invalid
+            "123", // CEP inválido para Brasil
             "Brasil",
             "BR",
             "",
         );
 
-        let update_req = UpdateOrganizationRequest::new(org_id, "Novo Nome", "editor")
-            .with_address(invalid_address);
+        let update_req = UpdateOrganizationRequest::new(
+            OrganizationId::new(TSID::from(100u64)),
+            "Novo Nome",
+            "editor",
+        )
+        .with_address(invalid_address);
 
         let result = service.execute(update_req).await;
         assert!(result.is_err());
@@ -220,7 +184,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_organization_service_not_found() {
         let repo = InMemoryOrganizationRepository::new();
-        let service = UpdateOrganizationService::new(repo);
+        let service = UpdateOrganizationService::new_for_tests(repo);
 
         let update_req = UpdateOrganizationRequest {
             organization_id: OrganizationId::new(TSID::from(999u64)),
@@ -237,7 +201,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_organization_validation_errors() {
         let repo = InMemoryOrganizationRepository::new();
-        let service = UpdateOrganizationService::new(repo);
+        let service = UpdateOrganizationService::new_for_tests(repo);
         let org_id = OrganizationId::new(TSID::from(100u64));
 
         let invalid_name_req = UpdateOrganizationRequest {

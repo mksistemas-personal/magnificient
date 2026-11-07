@@ -7,7 +7,7 @@ use shared::entities::{
     Address, AuditFields, BusinessError, Country, Document, DocumentType, TSID,
 };
 use shared::types::page::PageRequest;
-use sqlx::PgPool;
+use sqlx::{PgConnection, PgPool};
 use tracing::error;
 
 const ORGANIZATION_SELECT: &str = r#"
@@ -134,14 +134,11 @@ impl PostgresOrganizationRepository {
         &self.pool
     }
 
-    /// Executa o comando de inserção/atualização no PostgreSQL utilizando qualquer executor SQLx compatível.
-    async fn execute_save<'e, E>(
-        executor: E,
+    /// Executa o comando de inserção/atualização no PostgreSQL.
+    async fn execute_save(
+        conn: &mut PgConnection,
         organization: &Organization,
-    ) -> Result<Organization, BusinessError>
-    where
-        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-    {
+    ) -> Result<Organization, BusinessError> {
         let (created_at, updated_at, created_by, updated_by) = match &organization.audit {
             Some(audit) => (
                 audit.created_at(),
@@ -194,7 +191,7 @@ impl PostgresOrganizationRepository {
             .bind(updated_at)
             .bind(created_by)
             .bind(updated_by)
-            .execute(executor)
+            .execute(&mut *conn)
             .await
             .map_err(|err| {
                 if let Some(db_err) = err.as_database_error() {
@@ -210,41 +207,34 @@ impl PostgresOrganizationRepository {
         Ok(organization.clone())
     }
 
-    /// Executa a consulta de busca por ID no PostgreSQL utilizando qualquer executor SQLx compatível.
-    async fn execute_find_by_id<'e, E>(executor: E, id: TSID) -> Result<Organization, BusinessError>
-    where
-        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-    {
+    /// Executa a consulta de busca por ID no PostgreSQL.
+    async fn execute_find_by_id(
+        conn: &mut PgConnection,
+        id: TSID,
+    ) -> Result<Organization, BusinessError> {
         let id_raw = id.number() as i64;
         let mut query = sqlx::QueryBuilder::<sqlx::Postgres>::new(ORGANIZATION_SELECT);
         let row_opt = query
             .push(" AND o.id = ")
             .push_bind(id_raw)
             .build_query_as::<OrganizationRow>()
-            .fetch_optional(executor)
+            .fetch_optional(&mut *conn)
             .await
             .map_err(|err| {
                 error!("Failed to fetch organization by ID {}: {:?}", id, err);
                 BusinessError::internal(format!("Failed to query organization: {err}"))
             })?;
 
-        let row = match row_opt {
-            Some(row) => row,
-            None => return Err(OrganizationBusinessErrors::not_found()),
-        };
-
+        let row = row_opt.ok_or_else(OrganizationBusinessErrors::not_found)?;
         row.try_into()
     }
 
-    /// Executa o comando de exclusão lógica (soft delete) no PostgreSQL utilizando qualquer executor SQLx compatível.
-    async fn execute_delete<'e, E>(
-        executor: E,
+    /// Executa o comando de exclusão lógica (soft delete) no PostgreSQL.
+    async fn execute_delete(
+        conn: &mut PgConnection,
         id: TSID,
         updated_by: &str,
-    ) -> Result<(), BusinessError>
-    where
-        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-    {
+    ) -> Result<(), BusinessError> {
         let id_raw = id.number() as i64;
         let now = chrono::Utc::now();
         let query = r#"
@@ -257,7 +247,7 @@ impl PostgresOrganizationRepository {
             .bind(id_raw)
             .bind(now)
             .bind(updated_by)
-            .execute(executor)
+            .execute(&mut *conn)
             .await
             .map_err(|err| {
                 error!("Failed to delete organization by ID {}: {:?}", id, err);
@@ -271,15 +261,12 @@ impl PostgresOrganizationRepository {
         Ok(())
     }
 
-    /// Executa a consulta paginada com filtro opcional por nome no PostgreSQL utilizando qualquer executor SQLx compatível.
-    async fn execute_find_all<'e, E>(
-        executor: E,
+    /// Executa a consulta paginada com filtro opcional por nome no PostgreSQL.
+    async fn execute_find_all(
+        conn: &mut PgConnection,
         name: Option<&str>,
         page_request: &PageRequest,
-    ) -> Result<Vec<Organization>, BusinessError>
-    where
-        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-    {
+    ) -> Result<Vec<Organization>, BusinessError> {
         let name_filter = name.map(|n| n.trim()).filter(|n| !n.is_empty());
         let limit = page_request.limit() as i64;
         let offset = page_request.offset() as i64;
@@ -297,7 +284,7 @@ impl PostgresOrganizationRepository {
             .push(" OFFSET ")
             .push_bind(offset)
             .build_query_as::<OrganizationRow>()
-            .fetch_all(executor)
+            .fetch_all(&mut *conn)
             .await
             .map_err(|err| {
                 error!("Failed to list organizations: {:?}", err);
@@ -307,29 +294,30 @@ impl PostgresOrganizationRepository {
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
-    /// Executa a contagem de organizações que atendem ao filtro opcional por nome no PostgreSQL.
-    async fn execute_count<'e, E>(executor: E, name: Option<&str>) -> Result<u64, BusinessError>
-    where
-        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-    {
+    /// Executa a contagem de organizações que atendem ao filtro opcional por nome.
+    async fn execute_count(
+        conn: &mut PgConnection,
+        name: Option<&str>,
+    ) -> Result<u64, BusinessError> {
         let name_filter = name.map(|n| n.trim()).filter(|n| !n.is_empty());
-        let count_res: Result<i64, _> = if let Some(filter) = name_filter {
-            let pattern = format!("%{filter}%");
-            let query =
-                "SELECT COUNT(*) FROM organizations WHERE deleted = FALSE AND name ILIKE $1";
-            sqlx::query_scalar(query)
-                .bind(pattern)
-                .fetch_one(executor)
-                .await
-        } else {
-            let query = "SELECT COUNT(*) FROM organizations WHERE deleted = FALSE";
-            sqlx::query_scalar(query).fetch_one(executor).await
-        };
 
-        let total = count_res.map_err(|err| {
-            error!("Fail to count organizations: {:?}", err);
-            BusinessError::internal(format!("Failed to count organizations: {err}"))
-        })?;
+        let mut query = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "SELECT COUNT(*) FROM organizations WHERE deleted = FALSE",
+        );
+        if let Some(filter) = name_filter {
+            query
+                .push(" AND name ILIKE ")
+                .push_bind(format!("%{filter}%"));
+        }
+
+        let total: i64 = query
+            .build_query_scalar()
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(|err| {
+                error!("Failed to count organizations: {:?}", err);
+                BusinessError::internal(format!("Failed to count organizations: {err}"))
+            })?;
 
         Ok(total as u64)
     }
@@ -355,66 +343,46 @@ impl From<&DatabaseConnection> for PostgresOrganizationRepository {
 
 #[async_trait]
 impl OrganizationRepository for PostgresOrganizationRepository {
-    async fn save(&self, organization: &Organization) -> Result<Organization, BusinessError> {
-        Self::execute_save(&self.pool, organization).await
+    async fn save(
+        &self,
+        conn: &mut PgConnection,
+        organization: &Organization,
+    ) -> Result<Organization, BusinessError> {
+        Self::execute_save(conn, organization).await
     }
 
-    async fn find_by_id(&self, id: TSID) -> Result<Organization, BusinessError> {
-        Self::execute_find_by_id(&self.pool, id).await
+    async fn find_by_id(
+        &self,
+        conn: &mut PgConnection,
+        id: TSID,
+    ) -> Result<Organization, BusinessError> {
+        Self::execute_find_by_id(conn, id).await
     }
 
-    async fn delete(&self, id: TSID, updated_by: &str) -> Result<(), BusinessError> {
-        Self::execute_delete(&self.pool, id, updated_by).await
+    async fn delete(
+        &self,
+        conn: &mut PgConnection,
+        id: TSID,
+        updated_by: &str,
+    ) -> Result<(), BusinessError> {
+        Self::execute_delete(conn, id, updated_by).await
     }
 
     async fn find_all(
         &self,
+        conn: &mut PgConnection,
         name: Option<&str>,
         page_request: &PageRequest,
     ) -> Result<Vec<Organization>, BusinessError> {
-        Self::execute_find_all(&self.pool, name, page_request).await
+        Self::execute_find_all(conn, name, page_request).await
     }
 
-    async fn count(&self, name: Option<&str>) -> Result<u64, BusinessError> {
-        Self::execute_count(&self.pool, name).await
-    }
-
-    async fn save_in_tx(
+    async fn count(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        value: &Organization,
-    ) -> Result<Organization, BusinessError> {
-        Self::execute_save(&mut **tx, value).await
-    }
-    async fn find_by_id_in_tx(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        id: TSID,
-    ) -> Result<Organization, BusinessError> {
-        Self::execute_find_by_id(&mut **tx, id).await
-    }
-    async fn delete_in_tx(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        id: TSID,
-        updated_by: &str,
-    ) -> Result<(), BusinessError> {
-        Self::execute_delete(&mut **tx, id, updated_by).await
-    }
-    async fn find_all_in_tx(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        name: Option<&str>,
-        page: &PageRequest,
-    ) -> Result<Vec<Organization>, BusinessError> {
-        Self::execute_find_all(&mut **tx, name, page).await
-    }
-    async fn count_in_tx(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        conn: &mut PgConnection,
         name: Option<&str>,
     ) -> Result<u64, BusinessError> {
-        Self::execute_count(&mut **tx, name).await
+        Self::execute_count(conn, name).await
     }
 }
 

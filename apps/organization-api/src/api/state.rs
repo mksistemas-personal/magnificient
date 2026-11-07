@@ -1,8 +1,8 @@
 use crate::application::{
     AddOrganizationRequest, AddOrganizationService, DeleteOrganizationRequest,
     DeleteOrganizationService, FindAllOrganizationsRequest, FindAllOrganizationsService,
-    FindOrganizationByIdRequest, GetOrganizationByIdService, OrganizationPersistence,
-    UpdateOrganizationRequest, UpdateOrganizationService,
+    FindOrganizationByIdRequest, FromPersistence, GetOrganizationByIdService,
+    OrganizationPersistence, UpdateOrganizationRequest, UpdateOrganizationService,
 };
 use crate::config::organization_config::OrganizationAppConfig;
 use crate::domain::organization::Organization;
@@ -51,9 +51,10 @@ impl AppState {
             .unit_of_work()
             .with_schema(schema.to_owned())
             .map_err(|e| shared::entities::BusinessError::invalid_data(e.to_string()))?;
-        let repository = PostgresOrganizationRepository::new(self.db.pool().clone());
-        let address_repository = PostgresAddressRepository::new(self.db.pool().clone());
-        let persistence = OrganizationPersistence::new(repository)
+        let pool = self.db.pool().clone();
+        let repository = PostgresOrganizationRepository::new(pool.clone());
+        let address_repository = PostgresAddressRepository::new(pool.clone());
+        let persistence = OrganizationPersistence::new(repository, pool)
             .with_address_repository(address_repository)
             .with_unit_of_work(uow);
         Ok(Self::from_persistence(
@@ -66,10 +67,11 @@ impl AppState {
     }
 
     pub fn new(config: Arc<OrganizationAppConfig>, db: DatabaseConnection) -> Self {
-        let repository = PostgresOrganizationRepository::new(db.pool().clone());
-        let address_repository = PostgresAddressRepository::new(db.pool().clone());
+        let pool = db.pool().clone();
+        let repository = PostgresOrganizationRepository::new(pool.clone());
+        let address_repository = PostgresAddressRepository::new(pool.clone());
         let uow = db.unit_of_work();
-        let persistence = OrganizationPersistence::new(repository)
+        let persistence = OrganizationPersistence::new(repository, pool)
             .with_address_repository(address_repository)
             .with_unit_of_work(uow);
         Self::from_persistence(config, db, String::new(), None, persistence)
@@ -95,12 +97,13 @@ impl AppState {
         db: DatabaseConnection,
         repository: impl OrganizationRepository + 'static,
     ) -> Self {
+        let pool = db.pool().clone();
         Self::from_persistence(
             config,
             db,
             String::new(),
             None,
-            OrganizationPersistence::new(repository),
+            OrganizationPersistence::new(repository, pool),
         )
     }
 
@@ -110,8 +113,9 @@ impl AppState {
         repository: impl OrganizationRepository + 'static,
         address_repository: impl AddressRepository + 'static,
     ) -> Self {
-        let persistence =
-            OrganizationPersistence::new(repository).with_address_repository(address_repository);
+        let pool = db.pool().clone();
+        let persistence = OrganizationPersistence::new(repository, pool)
+            .with_address_repository(address_repository);
         Self::from_persistence(config, db, String::new(), None, persistence)
     }
 

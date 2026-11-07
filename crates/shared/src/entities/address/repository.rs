@@ -30,7 +30,7 @@ pub trait AddressRepository: Send + Sync {
 
     async fn save_in_tx(
         &self,
-        _tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        conn: &mut sqlx::PgConnection,
         address: &Address,
     ) -> Result<Address, BusinessError>;
 }
@@ -82,7 +82,7 @@ impl AddressRepository for InMemoryAddressRepository {
 
     async fn save_in_tx(
         &self,
-        _tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        _conn: &mut sqlx::PgConnection,
         address: &Address,
     ) -> Result<Address, BusinessError> {
         // The in-memory adapter has no database transaction or rollback semantics.
@@ -412,10 +412,10 @@ impl AddressRepository for PostgresAddressRepository {
 
     async fn save_in_tx(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        conn: &mut sqlx::PgConnection,
         address: &Address,
     ) -> Result<Address, BusinessError> {
-        Self::execute_save(&mut **tx, address).await
+        Self::execute_save(conn, address).await
     }
 }
 

@@ -90,6 +90,15 @@ mod tests {
         create_test_state_with_repo(InMemoryOrganizationRepository::new())
     }
 
+    /// Seed helper para testes: salva uma organização no repositório in-memory.
+    /// O InMemoryOrganizationRepository ignora o `&mut PgConnection`, então usamos
+    /// um ponteiro inerte exclusivamente em contexto de teste.
+    async fn seed_org(repo: &InMemoryOrganizationRepository, org: &Organization) {
+        let conn: &mut sqlx::PgConnection =
+            unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+        OrganizationRepository::save(repo, conn, org).await.unwrap();
+    }
+
     #[tokio::test]
     async fn test_health_check_endpoint() {
         let app = create_router(create_test_state());
@@ -220,7 +229,7 @@ mod tests {
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
         let org = Organization::new(org_id, "Acme Corp", doc)
             .with_audit(AuditFields::created("autor_original"));
-        repo.save(&org).await.unwrap();
+        seed_org(&repo, &org).await;
 
         let app = create_router(create_test_state_with_repo(repo));
 
@@ -291,7 +300,7 @@ mod tests {
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
         let org = Organization::new(org_id, "Acme Original", doc)
             .with_audit(AuditFields::created("autor"));
-        repo.save(&org).await.unwrap();
+        seed_org(&repo, &org).await;
 
         let app = create_router(create_test_state_with_repo(repo));
 
@@ -328,7 +337,7 @@ mod tests {
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
         let org = Organization::new(org_id, "Acme Original", doc)
             .with_audit(AuditFields::created("autor"));
-        repo.save(&org).await.unwrap();
+        seed_org(&repo, &org).await;
 
         let app = create_router(create_test_state_with_repo(repo));
 
@@ -389,7 +398,7 @@ mod tests {
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
         let org = Organization::new(org_id, "Acme Corp Para Deletar", doc)
             .with_audit(AuditFields::created("autor_original"));
-        repo.save(&org).await.unwrap();
+        seed_org(&repo, &org).await;
 
         let app = create_router(create_test_state_with_repo(repo.clone()));
 
@@ -420,7 +429,7 @@ mod tests {
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
         let org = Organization::new(org_id, "Acme Corp Para Deletar", doc)
             .with_audit(AuditFields::created("autor_original"));
-        repo.save(&org).await.unwrap();
+        seed_org(&repo, &org).await;
 
         let app = create_router(create_test_state_with_repo(repo.clone()));
 
@@ -472,7 +481,7 @@ mod tests {
         let id_str = org_id.to_string();
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
         let org = Organization::new(org_id, "Acme Corp", doc);
-        repo.save(&org).await.unwrap();
+        seed_org(&repo, &org).await;
 
         let app = create_router(create_test_state_with_repo(repo));
 
@@ -504,7 +513,7 @@ mod tests {
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
         let org = Organization::new(org_id, "Acme Corp Para Consulta", doc)
             .with_audit(AuditFields::created("admin"));
-        repo.save(&org).await.unwrap();
+        seed_org(&repo, &org).await;
 
         let app = create_router(create_test_state_with_repo(repo));
 
@@ -534,7 +543,7 @@ mod tests {
             let doc = Document::new(format!("{:014}", i), DocumentType::Cnpj);
             let org = Organization::new(org_id, format!("Org {}", i), doc)
                 .with_audit(AuditFields::created("admin"));
-            repo.save(&org).await.unwrap();
+            seed_org(&repo, &org).await;
         }
 
         let app = create_router(create_test_state_with_repo(repo));
@@ -574,7 +583,7 @@ mod tests {
             let doc = Document::new(format!("{:014}", i), DocumentType::Cnpj);
             let org =
                 Organization::new(org_id, name, doc).with_audit(AuditFields::created("admin"));
-            repo.save(&org).await.unwrap();
+            seed_org(&repo, &org).await;
         }
 
         let app = create_router(create_test_state_with_repo(repo));

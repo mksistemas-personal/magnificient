@@ -70,12 +70,6 @@ pub trait LoadOrganizationContext {
         self,
         persistence: &OrganizationPersistence,
     ) -> Result<Context<Loaded, LoadedContextData>, BusinessError>;
-
-    async fn load_in_tx(
-        self,
-        persistence: &OrganizationPersistence,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    ) -> Result<Context<Loaded, LoadedContextData>, BusinessError>;
 }
 
 #[async_trait]
@@ -86,21 +80,6 @@ impl LoadOrganizationContext for Context<AddressValidated, AddressValidatedConte
     ) -> Result<Context<Loaded, LoadedContextData>, BusinessError> {
         let org_id = self.data.request.organization_id;
         let organization = persistence.find_by_id(*org_id).await?;
-
-        Ok(Context::new(LoadedContextData {
-            request: self.data.request,
-            address: self.data.address,
-            organization,
-        }))
-    }
-
-    async fn load_in_tx(
-        self,
-        persistence: &OrganizationPersistence,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    ) -> Result<Context<Loaded, LoadedContextData>, BusinessError> {
-        let org_id = self.data.request.organization_id;
-        let organization = persistence.find_by_id_in_tx(tx, *org_id).await?;
 
         Ok(Context::new(LoadedContextData {
             request: self.data.request,
@@ -152,12 +131,6 @@ pub trait PersistOrganizationContext {
         self,
         persistence: &OrganizationPersistence,
     ) -> Result<Organization, BusinessError>;
-
-    async fn save_in_tx(
-        self,
-        persistence: &OrganizationPersistence,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    ) -> Result<Organization, BusinessError>;
 }
 
 #[async_trait]
@@ -167,13 +140,5 @@ impl PersistOrganizationContext for Context<Changed, ChangedContextData> {
         persistence: &OrganizationPersistence,
     ) -> Result<Organization, BusinessError> {
         persistence.save(self.data.organization).await
-    }
-
-    async fn save_in_tx(
-        self,
-        persistence: &OrganizationPersistence,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    ) -> Result<Organization, BusinessError> {
-        persistence.save_in_tx(tx, self.data.organization).await
     }
 }

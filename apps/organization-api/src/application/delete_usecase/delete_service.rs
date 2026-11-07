@@ -4,9 +4,8 @@ use crate::application::delete_usecase::states::*;
 use crate::application::delete_usecase::steps::{
     DeleteOrganizationContext, ValidateInitialContext,
 };
-use crate::domain::OrganizationRepository;
+use crate::application::service_constructors::FromPersistence;
 use async_trait::async_trait;
-use database::UnitOfWork;
 use shared::entities::BusinessError;
 use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncDeleteEntityUseCase;
@@ -16,22 +15,13 @@ pub struct DeleteOrganizationService {
     persistence: OrganizationPersistence,
 }
 
-impl DeleteOrganizationService {
-    pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
-        Self::with_persistence(OrganizationPersistence::new(repository))
-    }
-
-    pub fn with_persistence(persistence: OrganizationPersistence) -> Self {
+impl FromPersistence for DeleteOrganizationService {
+    fn with_persistence(persistence: OrganizationPersistence) -> Self {
         Self { persistence }
     }
+}
 
-    pub fn new_with_uow(
-        repository: impl OrganizationRepository + 'static,
-        uow: UnitOfWork,
-    ) -> Self {
-        Self::with_persistence(OrganizationPersistence::new(repository).with_unit_of_work(uow))
-    }
-
+impl DeleteOrganizationService {
     pub async fn execute(&self, request: DeleteOrganizationRequest) -> Result<(), BusinessError> {
         <Self as AsyncDeleteEntityUseCase<DeleteOrganizationRequest, ()>>::execute(self, request)
             .await
@@ -51,32 +41,41 @@ impl AsyncDeleteEntityUseCase<DeleteOrganizationRequest, ()> for DeleteOrganizat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{Organization, OrganizationId};
+    use crate::application::service_constructors::FromPersistence;
+    use crate::domain::{Organization, OrganizationId, OrganizationRepository};
     use crate::errors::OrganizationBusinessErrors;
     use crate::infrastructure::InMemoryOrganizationRepository;
     use shared::entities::{AuditFields, Document, DocumentType, TSID};
 
-    #[tokio::test]
-    async fn test_delete_organization_service_full_flow() {
-        let repo = InMemoryOrganizationRepository::new();
-        let org_id = OrganizationId::new(TSID::from(100u64));
+    async fn seed(repo: &InMemoryOrganizationRepository, id: u64) {
+        let org_id = OrganizationId::new(TSID::from(id));
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
         let org = Organization::new(org_id, "Empresa Para Deletar", doc)
             .with_audit(AuditFields::created("admin"));
+        let conn: &mut sqlx::PgConnection =
+            unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+        OrganizationRepository::save(repo, conn, &org).await.unwrap();
+    }
 
-        repo.save(&org).await.unwrap();
+    #[tokio::test]
+    async fn test_delete_organization_service_full_flow() {
+        let repo = InMemoryOrganizationRepository::new();
+        seed(&repo, 100).await;
 
-        let service = DeleteOrganizationService::new(repo.clone());
+        let service = DeleteOrganizationService::new_for_tests(repo.clone());
 
         let delete_req = DeleteOrganizationRequest {
-            organization_id: org_id,
+            organization_id: OrganizationId::new(TSID::from(100u64)),
             updated_by: "deleter_admin".to_string(),
         };
 
         let result = service.execute(delete_req).await;
         assert!(result.is_ok());
 
-        let find_res = OrganizationRepository::find_by_id(&repo, *org_id).await;
+        let conn: &mut sqlx::PgConnection =
+            unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+        let find_res =
+            OrganizationRepository::find_by_id(&repo, conn, TSID::from(100u64)).await;
         assert!(find_res.is_err());
         assert_eq!(
             find_res.unwrap_err(),
@@ -87,7 +86,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_organization_service_not_found() {
         let repo = InMemoryOrganizationRepository::new();
-        let service = DeleteOrganizationService::new(repo);
+        let service = DeleteOrganizationService::new_for_tests(repo);
 
         let delete_req = DeleteOrganizationRequest {
             organization_id: OrganizationId::new(TSID::from(999u64)),
@@ -102,7 +101,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_organization_validation_errors() {
         let repo = InMemoryOrganizationRepository::new();
-        let service = DeleteOrganizationService::new(repo);
+        let service = DeleteOrganizationService::new_for_tests(repo);
         let org_id = OrganizationId::new(TSID::from(100u64));
 
         let invalid_updater_req = DeleteOrganizationRequest {

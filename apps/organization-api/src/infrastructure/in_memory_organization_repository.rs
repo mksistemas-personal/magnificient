@@ -4,6 +4,7 @@ use crate::errors::OrganizationBusinessErrors;
 use async_trait::async_trait;
 use shared::entities::BusinessError;
 use shared::types::page::PageRequest;
+use sqlx::PgConnection;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tsid::TSID;
@@ -36,7 +37,11 @@ impl InMemoryOrganizationRepository {
 
 #[async_trait]
 impl OrganizationRepository for InMemoryOrganizationRepository {
-    async fn save(&self, organization: &Organization) -> Result<Organization, BusinessError> {
+    async fn save(
+        &self,
+        _conn: &mut PgConnection,
+        organization: &Organization,
+    ) -> Result<Organization, BusinessError> {
         let mut map = self.items.write().unwrap();
         // Verifica unicidade de documento
         for existing in map.values() {
@@ -52,7 +57,11 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
         Ok(organization.clone())
     }
 
-    async fn find_by_id(&self, id: TSID) -> Result<Organization, BusinessError> {
+    async fn find_by_id(
+        &self,
+        _conn: &mut PgConnection,
+        id: TSID,
+    ) -> Result<Organization, BusinessError> {
         let org_id = OrganizationId::new(id);
         self.items
             .read()
@@ -62,7 +71,12 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
             .ok_or_else(OrganizationBusinessErrors::not_found)
     }
 
-    async fn delete(&self, id: TSID, _updated_by: &str) -> Result<(), BusinessError> {
+    async fn delete(
+        &self,
+        _conn: &mut PgConnection,
+        id: TSID,
+        _updated_by: &str,
+    ) -> Result<(), BusinessError> {
         let org_id = OrganizationId::new(id);
         let mut map = self.items.write().unwrap();
         if map.remove(&org_id).is_none() {
@@ -73,6 +87,7 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
 
     async fn find_all(
         &self,
+        _conn: &mut PgConnection,
         name: Option<&str>,
         page_request: &PageRequest,
     ) -> Result<Vec<Organization>, BusinessError> {
@@ -100,7 +115,11 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
         Ok(result)
     }
 
-    async fn count(&self, name: Option<&str>) -> Result<u64, BusinessError> {
+    async fn count(
+        &self,
+        _conn: &mut PgConnection,
+        name: Option<&str>,
+    ) -> Result<u64, BusinessError> {
         let map = self.items.read().unwrap();
         let total = map
             .values()
@@ -116,55 +135,22 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
             .count() as u64;
         Ok(total)
     }
-
-    async fn save_in_tx(
-        &self,
-        _tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        organization: &Organization,
-    ) -> Result<Organization, BusinessError> {
-        // The in-memory adapter has no database transaction or rollback semantics.
-        self.save(organization).await
-    }
-
-    async fn find_by_id_in_tx(
-        &self,
-        _tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        id: TSID,
-    ) -> Result<Organization, BusinessError> {
-        <Self as OrganizationRepository>::find_by_id(self, id).await
-    }
-
-    async fn delete_in_tx(
-        &self,
-        _tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        id: TSID,
-        updated_by: &str,
-    ) -> Result<(), BusinessError> {
-        self.delete(id, updated_by).await
-    }
-
-    async fn find_all_in_tx(
-        &self,
-        _tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        name: Option<&str>,
-        page: &PageRequest,
-    ) -> Result<Vec<Organization>, BusinessError> {
-        self.find_all(name, page).await
-    }
-
-    async fn count_in_tx(
-        &self,
-        _tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        name: Option<&str>,
-    ) -> Result<u64, BusinessError> {
-        self.count(name).await
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use shared::entities::{AuditFields, Document, DocumentType};
+
+    macro_rules! with_dummy_conn {
+        ($body:expr) => {{
+            // O InMemoryOrganizationRepository ignora completamente o &mut PgConnection,
+            // mas o trait exige o parâmetro. Usamos unsafe somente nos testes para
+            // criar uma referência que nunca é desreferenciada.
+            let conn: &mut PgConnection = unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+            $body(conn)
+        }};
+    }
 
     #[tokio::test]
     async fn test_in_memory_find_by_id_success() {
@@ -174,11 +160,15 @@ mod tests {
         let org = Organization::new(org_id, "Empresa Teste", doc)
             .with_audit(AuditFields::created("admin"));
 
-        repo.save(&org).await.unwrap();
-
-        let found = OrganizationRepository::find_by_id(&repo, TSID::from(100u64))
+        with_dummy_conn!(|conn| repo.save(conn, &org))
             .await
             .unwrap();
+
+        let found = with_dummy_conn!(|conn| {
+            OrganizationRepository::find_by_id(&repo, conn, TSID::from(100u64))
+        })
+        .await
+        .unwrap();
         assert_eq!(found.id(), org_id);
         assert_eq!(found.name(), "Empresa Teste");
     }
@@ -186,7 +176,10 @@ mod tests {
     #[tokio::test]
     async fn test_in_memory_find_by_id_not_found() {
         let repo = InMemoryOrganizationRepository::new();
-        let result = OrganizationRepository::find_by_id(&repo, TSID::from(999u64)).await;
+        let result = with_dummy_conn!(|conn| {
+            OrganizationRepository::find_by_id(&repo, conn, TSID::from(999u64))
+        })
+        .await;
 
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), OrganizationBusinessErrors::not_found());
@@ -200,13 +193,20 @@ mod tests {
         let org = Organization::new(org_id, "Empresa Teste", doc)
             .with_audit(AuditFields::created("admin"));
 
-        repo.save(&org).await.unwrap();
+        with_dummy_conn!(|conn| repo.save(conn, &org))
+            .await
+            .unwrap();
 
-        let delete_res =
-            OrganizationRepository::delete(&repo, TSID::from(100u64), "admin_delete").await;
+        let delete_res = with_dummy_conn!(|conn| {
+            OrganizationRepository::delete(&repo, conn, TSID::from(100u64), "admin_delete")
+        })
+        .await;
         assert!(delete_res.is_ok());
 
-        let find_res = OrganizationRepository::find_by_id(&repo, TSID::from(100u64)).await;
+        let find_res = with_dummy_conn!(|conn| {
+            OrganizationRepository::find_by_id(&repo, conn, TSID::from(100u64))
+        })
+        .await;
         assert!(find_res.is_err());
         assert_eq!(
             find_res.unwrap_err(),
@@ -217,8 +217,10 @@ mod tests {
     #[tokio::test]
     async fn test_in_memory_delete_not_found() {
         let repo = InMemoryOrganizationRepository::new();
-        let result =
-            OrganizationRepository::delete(&repo, TSID::from(999u64), "admin_delete").await;
+        let result = with_dummy_conn!(|conn| {
+            OrganizationRepository::delete(&repo, conn, TSID::from(999u64), "admin_delete")
+        })
+        .await;
 
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), OrganizationBusinessErrors::not_found());
@@ -237,14 +239,18 @@ mod tests {
             let doc = Document::new(format!("{:014}", i), DocumentType::Cnpj);
             let org =
                 Organization::new(org_id, name, doc).with_audit(AuditFields::created("admin"));
-            repo.save(&org).await.unwrap();
+            with_dummy_conn!(|conn| repo.save(conn, &org))
+                .await
+                .unwrap();
         }
 
         // Test filter by name "Alfa"
         let page_req = PageRequest::new(1, 10);
-        let result = OrganizationRepository::find_all(&repo, Some("Alfa"), &page_req)
-            .await
-            .unwrap();
+        let result = with_dummy_conn!(|conn| {
+            OrganizationRepository::find_all(&repo, conn, Some("Alfa"), &page_req)
+        })
+        .await
+        .unwrap();
         assert_eq!(result.len(), 5);
         for org in &result {
             assert!(org.name().contains("Alfa"));
@@ -252,33 +258,40 @@ mod tests {
 
         // Test pagination: page 1, size 3
         let page1 = PageRequest::new(1, 3);
-        let result_p1 = OrganizationRepository::find_all(&repo, None, &page1)
-            .await
-            .unwrap();
+        let result_p1 =
+            with_dummy_conn!(|conn| OrganizationRepository::find_all(&repo, conn, None, &page1))
+                .await
+                .unwrap();
         assert_eq!(result_p1.len(), 3);
 
         // Test pagination: page 2, size 3
         let page2 = PageRequest::new(2, 3);
-        let result_p2 = OrganizationRepository::find_all(&repo, None, &page2)
-            .await
-            .unwrap();
+        let result_p2 =
+            with_dummy_conn!(|conn| OrganizationRepository::find_all(&repo, conn, None, &page2))
+                .await
+                .unwrap();
         assert_eq!(result_p2.len(), 3);
         assert_ne!(result_p1[0].id(), result_p2[0].id());
 
         // Test pagination: page 4, size 3 (should have 1 item out of 10)
         let page4 = PageRequest::new(4, 3);
-        let result_p4 = OrganizationRepository::find_all(&repo, None, &page4)
-            .await
-            .unwrap();
+        let result_p4 =
+            with_dummy_conn!(|conn| OrganizationRepository::find_all(&repo, conn, None, &page4))
+                .await
+                .unwrap();
         assert_eq!(result_p4.len(), 1);
 
         // Test count
-        let total_all = OrganizationRepository::count(&repo, None).await.unwrap();
+        let total_all =
+            with_dummy_conn!(|conn| OrganizationRepository::count(&repo, conn, None))
+                .await
+                .unwrap();
         assert_eq!(total_all, 10);
 
-        let total_alfa = OrganizationRepository::count(&repo, Some("Alfa"))
-            .await
-            .unwrap();
+        let total_alfa =
+            with_dummy_conn!(|conn| OrganizationRepository::count(&repo, conn, Some("Alfa")))
+                .await
+                .unwrap();
         assert_eq!(total_alfa, 5);
     }
 }

@@ -4,9 +4,9 @@ use crate::application::by_id_usecase::states::Initial;
 use crate::application::by_id_usecase::steps::{
     FindOrganizationByIdContext, ValidateInitialContext,
 };
-use crate::domain::{Organization, OrganizationRepository};
+use crate::application::service_constructors::FromPersistence;
+use crate::domain::Organization;
 use async_trait::async_trait;
-use database::UnitOfWork;
 use shared::entities::BusinessError;
 use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncGetByIdUseCase;
@@ -16,27 +16,13 @@ pub struct FindOrganizationByIdService {
     persistence: OrganizationPersistence,
 }
 
-impl FindOrganizationByIdService {
-    pub fn new(repository: impl OrganizationRepository + 'static) -> Self {
-        Self::with_persistence(OrganizationPersistence::new(repository))
-    }
-
-    pub fn with_persistence(persistence: OrganizationPersistence) -> Self {
+impl FromPersistence for FindOrganizationByIdService {
+    fn with_persistence(persistence: OrganizationPersistence) -> Self {
         Self { persistence }
     }
+}
 
-    pub fn new_with_uow(
-        repository: impl OrganizationRepository + 'static,
-        uow: UnitOfWork,
-    ) -> Self {
-        Self::with_persistence(OrganizationPersistence::new(repository).with_unit_of_work(uow))
-    }
-
-    pub fn with_uow(mut self, uow: UnitOfWork) -> Self {
-        self.persistence = self.persistence.with_unit_of_work(uow);
-        self
-    }
-
+impl FindOrganizationByIdService {
     pub async fn execute(
         &self,
         request: FindOrganizationByIdRequest,
@@ -68,8 +54,9 @@ impl AsyncGetByIdUseCase<FindOrganizationByIdRequest, Organization>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::service_constructors::FromPersistence;
     use crate::application::OrganizationBusinessErrors;
-    use crate::domain::{Organization, OrganizationId};
+    use crate::domain::{Organization, OrganizationId, OrganizationRepository};
     use crate::infrastructure::InMemoryOrganizationRepository;
     use shared::entities::{AuditFields, Document, DocumentType, TSID};
 
@@ -81,9 +68,13 @@ mod tests {
         let org = Organization::new(org_id, "Empresa Leitura", doc)
             .with_audit(AuditFields::created("admin"));
 
-        repo.save(&org).await.unwrap();
+        let conn: &mut sqlx::PgConnection =
+            unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+        OrganizationRepository::save(&repo, conn, &org)
+            .await
+            .unwrap();
 
-        let service = FindOrganizationByIdService::new(repo.clone());
+        let service = FindOrganizationByIdService::new_for_tests(repo);
         let request = FindOrganizationByIdRequest::new(org_id);
 
         let result = service.execute(request).await;
@@ -97,7 +88,7 @@ mod tests {
     #[tokio::test]
     async fn test_find_organization_by_id_service_not_found() {
         let repo = InMemoryOrganizationRepository::new();
-        let service = FindOrganizationByIdService::new(repo);
+        let service = FindOrganizationByIdService::new_for_tests(repo);
 
         let request = FindOrganizationByIdRequest::new(OrganizationId::new(TSID::from(999u64)));
 
@@ -109,7 +100,7 @@ mod tests {
     #[tokio::test]
     async fn test_find_organization_by_id_validation_errors() {
         let repo = InMemoryOrganizationRepository::new();
-        let service = FindOrganizationByIdService::new(repo);
+        let service = FindOrganizationByIdService::new_for_tests(repo);
 
         let invalid_req = FindOrganizationByIdRequest::new(OrganizationId::new(TSID::from(0u64)));
         let result = service.execute(invalid_req).await;

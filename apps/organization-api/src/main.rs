@@ -1,4 +1,6 @@
-use database::{DatabaseConnection, provision_tenant_schema};
+use database::{
+    DatabaseConnection, combine_migrators, migrator_with_table, provision_tenant_schema,
+};
 use messaging::{RabbitMqPublisher, create_rabbitmq_client};
 use organizacao_api::api::{AppState, create_router};
 use organizacao_api::config::organization_config::OrganizationAppConfig;
@@ -25,7 +27,13 @@ async fn setup_database(
     let db =
         DatabaseConnection::connect_with_config(&config.database.to_connection_config()).await?;
     info!("Executing database migrations...");
-    let migrator = sqlx::migrate!("./migrations");
+    let mut migrator = migrator_with_table(
+        combine_migrators([shared::database::migrator(), sqlx::migrate!("./migrations")]),
+        "organization_api_migrations",
+    );
+    // The organization-specific migrations were consolidated into one script.
+    // Ignore their retired version rows in databases that have not yet been reset.
+    migrator.set_ignore_missing(true);
     migrator.run(db.pool()).await?;
     info!("Control schema migrations run successfully.");
 

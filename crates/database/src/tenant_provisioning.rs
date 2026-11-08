@@ -1,7 +1,31 @@
 use sqlx::PgPool;
 use sqlx::migrate::Migrator;
 
-/// Creates a tenant schema and applies the service migrations to that schema.
+/// Builds an owned migrator configured with a service-specific history table.
+pub fn migrator_with_table(mut migrator: Migrator, table_name: &'static str) -> Migrator {
+    migrator.dangerous_set_table_name(table_name);
+    migrator
+}
+
+/// Combines migrations from shared and service-specific sources into one
+/// ordered SQLx migrator. Migration versions must be unique across the inputs.
+pub fn combine_migrators(migrators: impl IntoIterator<Item = Migrator>) -> Migrator {
+    let migrations: Vec<sqlx::migrate::Migration> = migrators
+        .into_iter()
+        .flat_map(|migrator| migrator.migrations.into_owned())
+        .collect();
+    let mut versions = std::collections::HashSet::new();
+    for migration in &migrations {
+        assert!(
+            versions.insert(migration.version),
+            "Migration version {} is duplicated across migration sources",
+            migration.version
+        );
+    }
+    Migrator::with_migrations(migrations)
+}
+
+/// Creates a tenant schema and applies the combined migrations to that schema.
 /// The slug is restricted to lowercase letters, digits and hyphens; the SQL
 /// identifier is generated here and is never accepted as arbitrary SQL input.
 pub async fn provision_tenant_schema(
@@ -33,17 +57,11 @@ pub async fn provision_tenant_schema(
 
     // Set session search_path only while this connection is checked out, then
     // always restore it before returning the connection to the shared pool.
-    let configured = sqlx::query("SELECT set_config('search_path', $1, false)")
+    sqlx::query("SELECT set_config('search_path', $1, false)")
         .bind(&quoted_schema)
         .execute(&mut *connection)
-        .await;
-    let migration_result = match configured {
-        Ok(_) => migrator
-            .run(&mut *connection)
-            .await
-            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync>),
-        Err(err) => Err(Box::new(err) as Box<dyn std::error::Error + Send + Sync>),
-    };
+        .await?;
+    let migration_result = migrator.run(&mut *connection).await;
     let reset_result = sqlx::query("RESET search_path")
         .execute(&mut *connection)
         .await;

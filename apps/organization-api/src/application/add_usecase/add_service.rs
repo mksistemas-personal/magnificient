@@ -8,8 +8,8 @@ use crate::application::add_usecase::steps::{
 use crate::application::service_constructors::FromPersistence;
 use crate::domain::Organization;
 use async_trait::async_trait;
-use shared::entities::{AsyncAddEntityUseCase, BusinessError};
 use shared::entities::use_case::context::Context;
+use shared::entities::{AsyncAddEntityUseCase, BusinessError};
 
 #[derive(Clone)]
 pub struct AddOrganizationService {
@@ -122,18 +122,26 @@ mod tests {
     async fn test_add_organization_with_empty_name() {
         let service = make_service();
 
-        let request = AddOrganizationRequest::new("", "00.000.000/0001-91", DocumentType::Cnpj, "admin");
+        let request =
+            AddOrganizationRequest::new("", "00.000.000/0001-91", DocumentType::Cnpj, "admin");
         let result = service.execute(request).await;
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), OrganizationBusinessErrors::name_empty());
+        assert_eq!(
+            result.unwrap_err(),
+            OrganizationBusinessErrors::name_empty()
+        );
     }
 
     #[tokio::test]
     async fn test_add_organization_with_empty_creator() {
         let service = make_service();
 
-        let request =
-            AddOrganizationRequest::new("Empresa Teste", "00.000.000/0001-91", DocumentType::Cnpj, "");
+        let request = AddOrganizationRequest::new(
+            "Empresa Teste",
+            "00.000.000/0001-91",
+            DocumentType::Cnpj,
+            "",
+        );
         let result = service.execute(request).await;
         assert!(result.is_err());
         assert_eq!(

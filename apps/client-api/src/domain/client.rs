@@ -1,25 +1,40 @@
 use shared::entities::audit::audit_fields::AuditFields;
-use shared::entities::{Document, EntityId};
+use shared::entities::{Address, EntityId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct ClientMarker;
 
-pub type ClientId = EntityId<ClientMarker>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct OrganizationMarker;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+pub type ClientId = EntityId<ClientMarker>;
+pub type OrganizationId = EntityId<OrganizationMarker>;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Client {
     pub id: ClientId,
+    pub organization_id: OrganizationId,
     pub name: String,
-    pub document: Document,
+    pub nickname: Option<String>,
+    pub second_address: Option<Address>,
     pub audit: Option<AuditFields>,
 }
 
 impl Client {
-    pub fn new(id: ClientId, name: impl Into<String>, document: Document) -> Self {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: ClientId,
+        organization_id: OrganizationId,
+        name: impl Into<String>,
+        nickname: Option<String>,
+        second_address: Option<Address>,
+    ) -> Self {
         Self {
             id,
+            organization_id,
             name: name.into(),
-            document,
+            nickname,
+            second_address,
             audit: None,
         }
     }
@@ -33,28 +48,30 @@ impl Client {
         self.id
     }
 
+    pub fn organization_id(&self) -> OrganizationId {
+        self.organization_id
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn document(&self) -> &Document {
-        &self.document
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use shared::entities::{DocumentType, TSID};
-
-    #[test]
-    fn test_create_client() {
-        let client_id = ClientId::new(TSID::from(200u64));
-        let doc = Document::new("123.456.789-09", DocumentType::Cpf);
-        let client = Client::new(client_id, "João Silva", doc);
-
-        assert_eq!(client.id(), ClientId::new(TSID::from(200u64)));
-        assert_eq!(client.name(), "João Silva");
-        assert_eq!(client.document().value(), "123.456.789-09");
+    pub fn update(
+        &mut self,
+        organization_id: OrganizationId,
+        name: impl Into<String>,
+        nickname: Option<String>,
+        second_address: Option<Address>,
+        updated_by: &str,
+    ) {
+        self.organization_id = organization_id;
+        self.name = name.into();
+        self.nickname = nickname;
+        self.second_address = second_address;
+        if let Some(audit) = self.audit.as_mut() {
+            audit.updated(updated_by);
+        } else {
+            self.audit = Some(AuditFields::created(updated_by));
+        }
     }
 }

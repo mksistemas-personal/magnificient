@@ -19,10 +19,16 @@ impl fmt::Display for DocumentError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DocumentError::InvalidFormat { expected, received } => {
-                write!(f, "Invalid format. Expected: {expected}, received: {received}")
+                write!(
+                    f,
+                    "Invalid format. Expected: {expected}, received: {received}"
+                )
             }
             DocumentError::InvalidLength { expected, received } => {
-                write!(f, "Invalid length. Expected: {expected} digits, received: {received}")
+                write!(
+                    f,
+                    "Invalid length. Expected: {expected} digits, received: {received}"
+                )
             }
             DocumentError::InvalidCheckDigits => {
                 write!(f, "Invalid check digits")

@@ -1,0 +1,16 @@
+[server]
+host = "127.0.0.1"
+port = 8182
+
+[database]
+host = "localhost"
+port = 5432
+name = "magnificient"
+username = "admin"
+password = "admin@123"
+max_connections = 10
+min_connections = 1
+acquire_timeout_secs = 30
+
+[logging]
+level = "info"

@@ -54,8 +54,8 @@ impl AsyncGetByIdUseCase<FindOrganizationByIdRequest, Organization>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::service_constructors::FromPersistence;
     use crate::application::OrganizationBusinessErrors;
+    use crate::application::service_constructors::FromPersistence;
     use crate::domain::{Organization, OrganizationId, OrganizationRepository};
     use crate::infrastructure::InMemoryOrganizationRepository;
     use shared::entities::{AuditFields, Document, DocumentType, TSID};
@@ -68,8 +68,7 @@ mod tests {
         let org = Organization::new(org_id, "Empresa Leitura", doc)
             .with_audit(AuditFields::created("admin"));
 
-        let conn: &mut sqlx::PgConnection =
-            unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+        let conn: &mut sqlx::PgConnection = unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
         OrganizationRepository::save(&repo, conn, &org)
             .await
             .unwrap();

@@ -56,8 +56,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_and_then_async_err_input() {
-        use std::sync::atomic::{AtomicBool, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
         let executed = Arc::new(AtomicBool::new(false));
         let executed_clone = executed.clone();
         let res: Result<i32, &str> = Err("initial error");
@@ -86,18 +86,14 @@ mod tests {
     #[tokio::test]
     async fn test_map_async_ok() {
         let res: Result<i32, &str> = Ok(10);
-        let result = res
-            .map_async(|val| async move { val * 3 })
-            .await;
+        let result = res.map_async(|val| async move { val * 3 }).await;
         assert_eq!(result, Ok(30));
     }
 
     #[tokio::test]
     async fn test_map_async_err() {
         let res: Result<i32, &str> = Err("error");
-        let result = res
-            .map_async(|val| async move { val * 3 })
-            .await;
+        let result = res.map_async(|val| async move { val * 3 }).await;
         assert_eq!(result, Err("error"));
     }
 }

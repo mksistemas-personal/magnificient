@@ -26,7 +26,12 @@ pub fn validate_cnpj(val: &str) -> Result<(), DocumentError> {
 
     // 1º dígito verificador
     let weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-    let sum1: u32 = nums.iter().take(12).zip(weights1.iter()).map(|(&d, &w)| d * w).sum();
+    let sum1: u32 = nums
+        .iter()
+        .take(12)
+        .zip(weights1.iter())
+        .map(|(&d, &w)| d * w)
+        .sum();
     let rest1 = sum1 % 11;
     let expected_d1 = if rest1 < 2 { 0 } else { 11 - rest1 };
 
@@ -36,7 +41,12 @@ pub fn validate_cnpj(val: &str) -> Result<(), DocumentError> {
 
     // 2º dígito verificador
     let weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-    let sum2: u32 = nums.iter().take(13).zip(weights2.iter()).map(|(&d, &w)| d * w).sum();
+    let sum2: u32 = nums
+        .iter()
+        .take(13)
+        .zip(weights2.iter())
+        .map(|(&d, &w)| d * w)
+        .sum();
     let rest2 = sum2 % 11;
     let expected_d2 = if rest2 < 2 { 0 } else { 11 - rest2 };
 
@@ -83,7 +93,12 @@ pub fn validate_cpf(val: &str) -> Result<(), DocumentError> {
     let nums: Vec<u32> = digits.chars().filter_map(|c| c.to_digit(10)).collect();
 
     // 1º dígito verificador
-    let sum1: u32 = nums.iter().take(9).enumerate().map(|(i, &d)| d * (10 - i as u32)).sum();
+    let sum1: u32 = nums
+        .iter()
+        .take(9)
+        .enumerate()
+        .map(|(i, &d)| d * (10 - i as u32))
+        .sum();
     let rest1 = sum1 % 11;
     let expected_d1 = if rest1 < 2 { 0 } else { 11 - rest1 };
 
@@ -92,7 +107,12 @@ pub fn validate_cpf(val: &str) -> Result<(), DocumentError> {
     }
 
     // 2º dígito verificador
-    let sum2: u32 = nums.iter().take(10).enumerate().map(|(i, &d)| d * (11 - i as u32)).sum();
+    let sum2: u32 = nums
+        .iter()
+        .take(10)
+        .enumerate()
+        .map(|(i, &d)| d * (11 - i as u32))
+        .sum();
     let rest2 = sum2 % 11;
     let expected_d2 = if rest2 < 2 { 0 } else { 11 - rest2 };
 
@@ -133,7 +153,12 @@ pub fn validate_cuit(val: &str) -> Result<(), DocumentError> {
     let nums: Vec<u32> = digits.chars().filter_map(|c| c.to_digit(10)).collect();
 
     let weights = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
-    let sum: u32 = nums.iter().take(10).zip(weights.iter()).map(|(&d, &w)| d * w).sum();
+    let sum: u32 = nums
+        .iter()
+        .take(10)
+        .zip(weights.iter())
+        .map(|(&d, &w)| d * w)
+        .sum();
     let rest = sum % 11;
 
     let expected_digit = match rest {

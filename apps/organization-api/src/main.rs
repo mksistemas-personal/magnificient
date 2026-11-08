@@ -1,4 +1,6 @@
-use database::{DatabaseConnection, provision_tenant_schema};
+use database::{
+    DatabaseConnection, migrator_with_table, prepare_migration_history, provision_tenant_schema,
+};
 use messaging::{RabbitMqPublisher, create_rabbitmq_client};
 use organizacao_api::api::{AppState, create_router};
 use organizacao_api::config::organization_config::OrganizationAppConfig;
@@ -25,8 +27,13 @@ async fn setup_database(
     let db =
         DatabaseConnection::connect_with_config(&config.database.to_connection_config()).await?;
     info!("Executing database migrations...");
-    let migrator = sqlx::migrate!("./migrations");
-    migrator.run(db.pool()).await?;
+    let migrator = migrator_with_table(
+        sqlx::migrate!("./migrations"),
+        "organization_api_migrations",
+    );
+    let mut connection = db.pool().acquire().await?;
+    prepare_migration_history(&mut connection, &migrator).await?;
+    migrator.run(&mut *connection).await?;
     info!("Control schema migrations run successfully.");
 
     let tenant_slugs: Vec<String> =

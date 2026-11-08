@@ -1,5 +1,12 @@
 use sqlx::PgPool;
 use sqlx::migrate::Migrator;
+use sqlx::postgres::PgConnection;
+
+/// Builds an owned migrator configured with a service-specific history table.
+pub fn migrator_with_table(mut migrator: Migrator, table_name: &'static str) -> Migrator {
+    migrator.dangerous_set_table_name(table_name);
+    migrator
+}
 
 /// Creates a tenant schema and applies the service migrations to that schema.
 /// The slug is restricted to lowercase letters, digits and hyphens; the SQL
@@ -38,10 +45,13 @@ pub async fn provision_tenant_schema(
         .execute(&mut *connection)
         .await;
     let migration_result = match configured {
-        Ok(_) => migrator
-            .run(&mut *connection)
-            .await
-            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync>),
+        Ok(_) => match prepare_migration_history(&mut connection, migrator).await {
+            Ok(()) => migrator
+                .run(&mut *connection)
+                .await
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync>),
+            Err(err) => Err(Box::new(err) as Box<dyn std::error::Error + Send + Sync>),
+        },
         Err(err) => Err(Box::new(err) as Box<dyn std::error::Error + Send + Sync>),
     };
     let reset_result = sqlx::query("RESET search_path")
@@ -70,4 +80,61 @@ pub async fn provision_tenant_schema(
         )));
     }
     Ok(schema)
+}
+
+/// Creates the service-specific SQLx migration table and imports only matching
+/// entries from the legacy `_sqlx_migrations` table, if present. This preserves
+/// migration history during rollout while allowing APIs to share a schema.
+pub async fn prepare_migration_history(
+    connection: &mut PgConnection,
+    migrator: &Migrator,
+) -> Result<(), sqlx::Error> {
+    let table_name = migrator.table_name.as_ref();
+    if table_name == "_sqlx_migrations" {
+        return Ok(());
+    }
+    if !table_name
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || character == '_')
+        || table_name.is_empty()
+    {
+        return Err(sqlx::Error::Protocol(
+            "Migration table name must be a simple SQL identifier".into(),
+        ));
+    }
+
+    let legacy_table_exists: bool =
+        sqlx::query_scalar("SELECT to_regclass('_sqlx_migrations') IS NOT NULL")
+            .fetch_one(&mut *connection)
+            .await?;
+    if !legacy_table_exists {
+        return Ok(());
+    }
+
+    let quoted_table = format!("\"{table_name}\"");
+    let create_sql = format!(
+        "CREATE TABLE IF NOT EXISTS {quoted_table} (\
+         version BIGINT PRIMARY KEY, description TEXT NOT NULL, \
+         installed_on TIMESTAMPTZ NOT NULL DEFAULT now(), success BOOLEAN NOT NULL, \
+         checksum BYTEA NOT NULL, execution_time BIGINT NOT NULL)"
+    );
+    sqlx::raw_sql(sqlx::AssertSqlSafe(create_sql))
+        .execute(&mut *connection)
+        .await?;
+
+    let versions: Vec<i64> = migrator
+        .migrations
+        .iter()
+        .map(|migration| migration.version)
+        .collect();
+    let copy_sql = format!(
+        "INSERT INTO {quoted_table} (version, description, installed_on, success, checksum, execution_time) \
+         SELECT version, description, installed_on, success, checksum, execution_time \
+         FROM _sqlx_migrations WHERE version = ANY($1) ON CONFLICT (version) DO NOTHING"
+    );
+    sqlx::query(sqlx::AssertSqlSafe(copy_sql))
+        .bind(versions)
+        .execute(&mut *connection)
+        .await?;
+    Ok(())
 }

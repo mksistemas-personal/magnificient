@@ -1,6 +1,6 @@
 use cliente_api::api::{AppState, create_router};
 use cliente_api::config::ClientAppConfig;
-use database::{DatabaseConnection, provision_tenant_schema};
+use database::{DatabaseConnection, migrator_with_table, provision_tenant_schema};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
@@ -18,7 +18,7 @@ async fn setup_database(
     config: &ClientAppConfig,
 ) -> Result<DatabaseConnection, Box<dyn std::error::Error>> {
     let db = DatabaseConnection::connect_with_config(&config.database).await?;
-    let migrator = sqlx::migrate!("./migrations");
+    let migrator = migrator_with_table(sqlx::migrate!("./migrations"), "client_api_migrations");
     let tenant_slugs: Vec<String> =
         sqlx::query_scalar("SELECT slug FROM public.tenants WHERE active = TRUE ORDER BY slug")
             .fetch_all(db.pool())

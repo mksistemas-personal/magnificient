@@ -1,5 +1,5 @@
-// Modelos e regras de domínio
-
 pub mod client;
+pub mod client_repository;
 
-pub use client::Client;
+pub use client::{Client, ClientId, OrganizationId};
+pub use client_repository::ClientRepository;

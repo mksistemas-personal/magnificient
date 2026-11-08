@@ -52,9 +52,10 @@ mod tests {
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
         let org = Organization::new(org_id, "Empresa Para Deletar", doc)
             .with_audit(AuditFields::created("admin"));
-        let conn: &mut sqlx::PgConnection =
-            unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
-        OrganizationRepository::save(repo, conn, &org).await.unwrap();
+        let conn: &mut sqlx::PgConnection = unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+        OrganizationRepository::save(repo, conn, &org)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -72,10 +73,8 @@ mod tests {
         let result = service.execute(delete_req).await;
         assert!(result.is_ok());
 
-        let conn: &mut sqlx::PgConnection =
-            unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
-        let find_res =
-            OrganizationRepository::find_by_id(&repo, conn, TSID::from(100u64)).await;
+        let conn: &mut sqlx::PgConnection = unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+        let find_res = OrganizationRepository::find_by_id(&repo, conn, TSID::from(100u64)).await;
         assert!(find_res.is_err());
         assert_eq!(
             find_res.unwrap_err(),

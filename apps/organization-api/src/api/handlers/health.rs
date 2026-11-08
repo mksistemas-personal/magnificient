@@ -1,6 +1,6 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use serde_json::json;
 use crate::api::state::AppState;
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use serde_json::json;
 
 pub async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
     (

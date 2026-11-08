@@ -8,9 +8,8 @@ where
     I: ColumnIndex<R> + std::fmt::Display + Copy,
     T: Decode<'r, R::Database> + Type<R::Database>,
 {
-    row.try_get(index).map_err(|err| {
-        BusinessError::internal(format!("database.column.error[{index}|{err}]"))
-    })
+    row.try_get(index)
+        .map_err(|err| BusinessError::internal(format!("database.column.error[{index}|{err}]")))
 }
 
 /// Extension trait for chaining operations on database rows (`Row`).

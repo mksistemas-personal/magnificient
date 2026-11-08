@@ -27,9 +27,7 @@ async fn scoped_state(state: &AppState, tenant: &str) -> Result<AppState, ApiErr
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
         && !tenant.contains("--");
     if !tenant_valid {
-        return Err(ApiError::BadRequest(
-            "Invalid tenant identifier".into(),
-        ));
+        return Err(ApiError::BadRequest("Invalid tenant identifier".into()));
     }
     let schema: Option<String> = sqlx::query_scalar(
         "SELECT schema_name FROM public.tenants WHERE slug = $1 AND active = TRUE",

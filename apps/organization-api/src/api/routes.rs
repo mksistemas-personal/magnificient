@@ -94,8 +94,7 @@ mod tests {
     /// O InMemoryOrganizationRepository ignora o `&mut PgConnection`, então usamos
     /// um ponteiro inerte exclusivamente em contexto de teste.
     async fn seed_org(repo: &InMemoryOrganizationRepository, org: &Organization) {
-        let conn: &mut sqlx::PgConnection =
-            unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+        let conn: &mut sqlx::PgConnection = unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
         OrganizationRepository::save(repo, conn, org).await.unwrap();
     }
 

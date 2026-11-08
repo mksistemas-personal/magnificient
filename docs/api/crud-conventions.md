@@ -64,7 +64,33 @@ Create a request model and service for each operation that the API exposes. The 
 - Get by ID: validate the ID, load the entity, and propagate not-found errors.
 - List: validate filters and pagination, retrieve the page content and total, then return `Page<Entity>`.
 
-Use case services implement the shared async use-case traits and expose an `execute` method. Keep the service as an orchestrator; put discrete validation or state transitions in the operation's `steps.rs` when that operation follows the organization typestate pipeline. The organization create/update flows use `Context<State, Data>` to make their sequence explicit. Avoid introducing extra state/data types for a simple flow unless they improve clarity or enforce a meaningful transition.
+Use case services implement the shared async use-case traits and expose an `execute` method. **Every CRUD operation must use the railway/typestate flow**, following `organization-api`; this is the standard for new CRUDs and refactors, not an optional pattern for only complex operations. Do not put validation, entity changes, or persistence calls directly in the service's `execute` method.
+
+### Required railway structure
+
+Create one directory per use case under `application/`: `add_usecase/`, `update_usecase/`, `delete_usecase/`, `by_id_usecase/`, and `all_usecase/` (include only operations exposed by that API). Each directory must contain:
+
+- `data.rs`: the operation request and the data carried between steps. Keep request data separate from intermediate results where the flow needs them.
+- `states.rs`: marker types for the states of that operation. State transitions should be represented in the type of `Context<State, Data>`.
+- `steps.rs`: validation and operation steps, each implemented for the context state it accepts and returning the next state/data (or the final result).
+- A service file (`add_service.rs`, `update_service.rs`, `delete_service.rs`, `by_id_service.rs`, or `all_service.rs`): implement the shared use-case trait and compose the steps in order. The service owns/injects persistence and coordinates the railway; it does not reimplement step logic.
+- `mod.rs`: keep implementation modules private and re-export the public request and service types needed by API wiring.
+
+Use `Context::<Initial, _>::new(...)` to start a flow. Use `?` for synchronous steps and `.await?`/`.await` for asynchronous steps. A step must consume its input context and produce the next typed context/result; do not mutate a generic bag of optional fields or bypass the state transition. Name states after the completed phase (for example `Initial -> Validated -> AddressValidated -> Built`). Keep the states and data specific to each operation; share small domain helpers only when the behavior is truly common.
+
+The minimum flow for each operation is:
+
+| Operation | Typical railway |
+| --- | --- |
+| Create | `Initial -> Validated -> [RelatedDataValidated] -> Built -> save` |
+| Update | `Initial -> Validated -> [RelatedDataValidated] -> Loaded -> Changed -> save` |
+| Delete | `Initial -> Validated -> delete` |
+| Get by ID | `Initial -> Validated -> find` |
+| List/search | `Initial -> Validated -> find page` |
+
+Bracketed phases apply only when that use case has related input to validate. Even a short operation gets its own `data.rs`, `states.rs`, and `steps.rs`, so every CRUD has the same entry point, separation of responsibilities, and discoverable flow. Do not add meaningless states: a state represents a completed validation or action and gates the next step.
+
+Follow the concrete `organization-api` use-case modules as the reference for trait signatures, `Context` construction, async steps, and service composition. Keep business rules (such as client-specific optional address handling) inside the relevant step, not in a generic CRUD framework. API handlers should continue to call the service through its application request type.
 
 Use `OrganizationPersistence` as the reference for sharing repository dependencies and transaction policy across services. Each API should have its own persistence coordinator typed to its own repository. Use `database::UnitOfWork` when an operation must be atomic across multiple repository calls. Repositories involved in that operation must use the connection passed by the coordinator so they participate in the same transaction.
 
@@ -121,13 +147,13 @@ Before changing code, inspect the reference files listed above and the target AP
 
 1. Identify the entity fields, invariants, audit requirements, soft-delete policy, tenant scope, and any domain events from the task or existing code. Do not invent missing business rules.
 2. Add or update the domain entity, typed ID, repository contract, and entity error constants.
-3. Add application request types and one service per required CRUD operation; reuse shared pagination, error, audit, and persistence types where suitable.
+3. Add a railway module per required CRUD operation, each with `data.rs`, `states.rs`, `steps.rs`, a service file, and `mod.rs`; compose the steps in the service and reuse shared pagination, error, audit, and persistence types where suitable.
 4. Add PostgreSQL and in-memory adapters that implement the same contract.
 5. Add input/query/response DTOs, conversions, handlers, routes, and `AppState` wiring.
 6. Add migrations only when the schema needs a change; follow the project's existing migration naming and conventions.
 7. Add required events only when specified or already established for that domain.
 8. Add the layer-appropriate tests from the checklist above.
-9. Run formatting, the narrow crate check, and relevant tests; report any unavailable integration dependencies instead of claiming they passed.
+9. Format and check the narrow crate, then run relevant tests when the task's verification scope calls for them; report any unavailable integration dependencies instead of claiming they passed.
 10. Summarize created/changed files, API routes, assumptions, and verification results.
 
 For lower-cost generation, pass this document plus only the relevant `organization-api` reference files and the target API's current files. Avoid including unrelated APIs, deployment manifests, or the entire repository unless the task requires them.

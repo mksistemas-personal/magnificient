@@ -1,3 +1,3 @@
 pub mod row;
 
-pub use row::{row_get_field, RowExt};
+pub use row::{RowExt, row_get_field};

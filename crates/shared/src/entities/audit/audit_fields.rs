@@ -171,4 +171,3 @@ mod tests {
         assert_eq!(audit.updated_by, "updater");
     }
 }
-

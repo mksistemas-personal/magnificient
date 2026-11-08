@@ -80,8 +80,7 @@ impl ConnectionExecutor {
                     // é necessário para satisfazer o `for<'c>` do callback, mas o Future
                     // retornado por `f(conn)` não escapa do escopo de `tx` — o UoW mantém
                     // `tx` vivo até o Future completar antes de fazer commit/rollback.
-                    let conn: &mut PgConnection =
-                        unsafe { &mut *(&mut **tx as *mut PgConnection) };
+                    let conn: &mut PgConnection = unsafe { &mut *(&mut **tx as *mut PgConnection) };
                     f(conn)
                 })
                 .await

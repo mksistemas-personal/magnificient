@@ -61,8 +61,7 @@ mod tests {
     use shared::types::page::PageRequest;
 
     async fn seed_repos(repo: &InMemoryOrganizationRepository, count: usize) {
-        let conn: &mut sqlx::PgConnection =
-            unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+        let conn: &mut sqlx::PgConnection = unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
         for i in 1..=count {
             let name = if i % 2 == 0 {
                 format!("Acme Corp {}", i)

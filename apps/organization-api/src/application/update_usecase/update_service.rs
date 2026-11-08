@@ -8,9 +8,9 @@ use crate::application::update_usecase::steps::{
 };
 use crate::domain::Organization;
 use async_trait::async_trait;
+use shared::entities::BusinessError;
 use shared::entities::use_case::context::Context;
 use shared::entities::use_case::use_case_traits::AsyncUpdateEntityUseCase;
-use shared::entities::BusinessError;
 
 #[derive(Clone)]
 pub struct UpdateOrganizationService {
@@ -75,9 +75,10 @@ mod tests {
         let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
         let org = Organization::new(org_id, "Nome Original", doc)
             .with_audit(AuditFields::created("admin"));
-        let conn: &mut sqlx::PgConnection =
-            unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
-        OrganizationRepository::save(repo, conn, &org).await.unwrap();
+        let conn: &mut sqlx::PgConnection = unsafe { &mut *std::ptr::NonNull::dangling().as_ptr() };
+        OrganizationRepository::save(repo, conn, &org)
+            .await
+            .unwrap();
         org
     }
 
@@ -111,7 +112,8 @@ mod tests {
         let address_repo = InMemoryAddressRepository::new();
         seed(&repo, 100).await;
 
-        let service = UpdateOrganizationService::new_with_repositories_for_tests(repo, address_repo.clone());
+        let service =
+            UpdateOrganizationService::new_with_repositories_for_tests(repo, address_repo.clone());
 
         let address = Address::new(
             "Av. Paulista",
@@ -154,7 +156,8 @@ mod tests {
         let address_repo = InMemoryAddressRepository::new();
         seed(&repo, 100).await;
 
-        let service = UpdateOrganizationService::new_with_repositories_for_tests(repo, address_repo);
+        let service =
+            UpdateOrganizationService::new_with_repositories_for_tests(repo, address_repo);
 
         let invalid_address = Address::new(
             "Av. Paulista",

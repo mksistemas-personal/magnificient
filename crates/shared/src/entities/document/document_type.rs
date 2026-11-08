@@ -240,8 +240,14 @@ mod tests {
         assert_eq!(DocumentType::from_code("cuit", None), DocumentType::Cuit);
         assert_eq!(DocumentType::from_code("CUIL", None), DocumentType::Cuil);
         assert_eq!(DocumentType::from_code("dni", None), DocumentType::Dni);
-        assert_eq!(DocumentType::from_code("PASSPORT", None), DocumentType::Passport);
-        assert_eq!(DocumentType::from_code("passaporte", None), DocumentType::Passport);
+        assert_eq!(
+            DocumentType::from_code("PASSPORT", None),
+            DocumentType::Passport
+        );
+        assert_eq!(
+            DocumentType::from_code("passaporte", None),
+            DocumentType::Passport
+        );
         assert_eq!(
             DocumentType::from_code("TAX_ID", Some(Country::Brazil)),
             DocumentType::Other {

@@ -282,10 +282,9 @@ mod tests {
         assert_eq!(result_p4.len(), 1);
 
         // Test count
-        let total_all =
-            with_dummy_conn!(|conn| OrganizationRepository::count(&repo, conn, None))
-                .await
-                .unwrap();
+        let total_all = with_dummy_conn!(|conn| OrganizationRepository::count(&repo, conn, None))
+            .await
+            .unwrap();
         assert_eq!(total_all, 10);
 
         let total_alfa =

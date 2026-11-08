@@ -121,9 +121,7 @@ impl UnitOfWork {
                 debug!("Committing Unit of Work transaction...");
                 tx.commit().await.map_err(|err| {
                     error!("Failed to commit transaction: {:?}", err);
-                    BusinessError::internal(format!(
-                        "Failed to commit database transaction: {err}"
-                    ))
+                    BusinessError::internal(format!("Failed to commit database transaction: {err}"))
                 })?;
                 debug!("Transaction committed successfully.");
                 Ok(result)

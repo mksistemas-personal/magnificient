@@ -8,6 +8,6 @@ pub use address::Address;
 pub use errors::AddressBusinessErrors;
 pub use repository::{AddressRepository, InMemoryAddressRepository, PostgresAddressRepository};
 pub use validator::{
-    validator_for_country, AddressValidator, ArgentinaAddressValidator, BrazilAddressValidator,
-    GenericAddressValidator, UnitedStatesAddressValidator,
+    AddressValidator, ArgentinaAddressValidator, BrazilAddressValidator, GenericAddressValidator,
+    UnitedStatesAddressValidator, validator_for_country,
 };

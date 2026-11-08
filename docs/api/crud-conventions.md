@@ -1,0 +1,133 @@
+# API CRUD conventions
+
+This document describes the CRUD structure used by `organization-api` and the conventions to follow when adding or aligning CRUDs in `client-api` and `producer-api`.
+
+Use `organization-api` as the implementation reference. The other APIs may have domain-specific fields and behavior, but should preserve the same separation of responsibilities and request flow. Do not copy organization-only behavior such as document rules, address persistence, tenant routing, or RabbitMQ events unless the target domain needs it.
+
+## Reference implementation
+
+When implementing a CRUD, inspect these files first:
+
+- Domain: `apps/organization-api/src/domain/organization.rs`
+- Repository contract: `apps/organization-api/src/domain/organization_repository.rs`
+- Persistence and transaction policy: `apps/organization-api/src/application/persistence.rs`
+- Use cases: `apps/organization-api/src/application/{add,update,delete,by_id,all}_usecase/`
+- API DTOs and response mapping: `apps/organization-api/src/api/`
+- Handlers and routes: `apps/organization-api/src/api/handlers/organizations_controller.rs` and `apps/organization-api/src/api/routes.rs`
+- PostgreSQL implementation: `apps/organization-api/src/infrastructure/postgres_organization_repository.rs`
+- In-memory implementation: `apps/organization-api/src/infrastructure/in_memory_organization_repository.rs`
+- Application errors: `apps/organization-api/src/errors.rs`
+
+## Layer responsibilities
+
+Keep dependencies flowing inward: API code translates HTTP input and output, application code orchestrates use cases, domain code defines entities and repository contracts, and infrastructure implements persistence and integrations.
+
+| Layer | Responsibility | Organization API example |
+| --- | --- | --- |
+| `api` | HTTP routes, request/query DTOs, response DTOs, handlers, HTTP error conversion | `add_organization_dto.rs`, `organizations_controller.rs` |
+| `application` | Request models, validation and use-case flow, persistence coordination | `add_usecase/`, `OrganizationPersistence` |
+| `domain` | Entity, typed ID, repository contract, domain events when needed | `organization.rs`, `organization_repository.rs` |
+| `infrastructure` | PostgreSQL and in-memory repository implementations, external adapters | `postgres_organization_repository.rs` |
+
+Do not put SQL in handlers or HTTP types in the domain. Keep domain behavior and validation independent of Axum and SQLx where practical.
+
+## Domain entity and identifier
+
+- Define an entity in `domain/<entity>.rs` and re-export it from `domain/mod.rs`.
+- Use a marker type and `EntityId<Marker>` for a strongly typed identifier, following `OrganizationId`.
+- Keep entity methods focused on domain state changes. Use builder-style methods such as `with_audit` only where they make construction clearer.
+- Reuse shared types such as `AuditFields`, `Document`, `Address`, `TSID`, `Page`, and `BusinessError` when their semantics match.
+- Include audit information when the entity is audited. Creation should set the creator; updates should preserve creation fields and update the updater and timestamp.
+- Do not add fields, validation rules, or shared types just to make an entity look like `Organization`; model the actual domain.
+
+## Repository contract and implementations
+
+- Define one domain repository trait per aggregate in `domain/<entity>_repository.rs`.
+- Repository methods receive `&mut PgConnection`. This lets the same contract be called with a pool-acquired connection or a transaction connection without duplicating transaction-specific methods.
+- Keep methods focused on persistence operations: save, find by ID, delete, list/search, and count when pagination needs a total.
+- Return domain entities and `BusinessError`, not SQLx rows or `ApiError`.
+- Implement both PostgreSQL and in-memory adapters when the API uses the same repository abstraction in production and tests.
+- Keep SQL and row-to-domain mapping inside the PostgreSQL repository. Prefer a small `FromRow` row type when the result has a joined or nontrivial mapping.
+- Use bound query parameters. For dynamic filters, build the query with `QueryBuilder`; do not interpolate user input into SQL.
+- Follow the existing soft-delete behavior where records must be retained: reads exclude deleted rows, delete marks the row deleted and updates audit fields, and a missing/already-deleted row returns the domain not-found error.
+- Centralize domain error constants and constructors in an entity-specific error module, following `OrganizationBusinessErrors`. Do not duplicate error strings across handlers, services, and repositories.
+
+The in-memory adapter should preserve the observable behavior of the PostgreSQL adapter for the operations it implements. It should not pretend to provide database rollback semantics.
+
+## Application use cases
+
+Create a request model and service for each operation that the API exposes. The organization API uses these operations:
+
+- Create: validate input, create typed ID/domain values and audit fields, then persist.
+- Update: validate, load the current entity, apply the allowed changes, update audit fields, then persist.
+- Delete: validate the ID and actor, then perform a soft delete when required by the domain.
+- Get by ID: validate the ID, load the entity, and propagate not-found errors.
+- List: validate filters and pagination, retrieve the page content and total, then return `Page<Entity>`.
+
+Use case services implement the shared async use-case traits and expose an `execute` method. Keep the service as an orchestrator; put discrete validation or state transitions in the operation's `steps.rs` when that operation follows the organization typestate pipeline. The organization create/update flows use `Context<State, Data>` to make their sequence explicit. Avoid introducing extra state/data types for a simple flow unless they improve clarity or enforce a meaningful transition.
+
+Use `OrganizationPersistence` as the reference for sharing repository dependencies and transaction policy across services. Each API should have its own persistence coordinator typed to its own repository. Use `database::UnitOfWork` when an operation must be atomic across multiple repository calls. Repositories involved in that operation must use the connection passed by the coordinator so they participate in the same transaction.
+
+Use the `FromPersistence` constructor pattern when several use cases share the same persistence dependencies. Wire production adapters in `api/state.rs`; inject in-memory adapters for unit/API tests.
+
+## API DTOs, handlers, and routes
+
+- Keep request and query DTOs in `api/`. Convert them into application request types at the API boundary.
+- Keep response DTOs separate from domain entities. Map domain values to JSON explicitly, including typed IDs and audit timestamps.
+- Apply defaults and aliases in DTO deserialization only when they are part of the API contract. Do not hide required-field validation behind a default value.
+- Handlers should extract state/path/query/body, convert to an application request, call the use case, map the result to a response DTO, and choose the HTTP status.
+- Convert `BusinessError` to `ApiError` at the API boundary. Do not return infrastructure errors directly to HTTP clients.
+- Register endpoints in the API router and keep health routes consistent with the existing service.
+
+The organization routes currently use a tenant path segment:
+
+```text
+POST   /api/v1/{tenant}/organizations
+GET    /api/v1/{tenant}/organizations
+GET    /api/v1/{tenant}/organizations/{id}
+PUT    /api/v1/{tenant}/organizations/{id}
+DELETE /api/v1/{tenant}/organizations/{id}
+```
+
+Preserve the target API's existing tenant model. If it is tenant-scoped, resolve the tenant through the trusted registry and use a tenant-scoped `UnitOfWork`; never treat an unchecked user-provided schema name as a trusted database identifier.
+
+Follow the existing status convention: create returns `201 Created`, read/update return `200 OK`, and a successful delete returns `204 No Content`. Keep each API's established versioned prefix and resource naming consistent.
+
+## Errors, events, and transactions
+
+- Use entity-specific error constants/factories for expected business failures such as invalid data, duplicate values, and not found.
+- Use `BusinessError::internal` for unexpected persistence failures; preserve the underlying error for logs/diagnostics, not as a misleading not-found response.
+- Map domain errors to HTTP status codes through the shared API error conversion.
+- Publish events only when the API/domain requires them. `organization-api` publishes create/update/delete events after its use case succeeds; this is not an automatic requirement for every CRUD.
+- If an event and a database mutation must be atomic together, do not assume the current post-commit publish flow provides that guarantee. Use an explicitly designed outbox or equivalent mechanism if that guarantee is required.
+- Keep transaction boundaries in the persistence/application coordination layer, not in HTTP handlers.
+
+## Tests expected for a new CRUD
+
+Add tests at the layer where behavior belongs:
+
+- Domain tests for entity construction and state changes.
+- Use-case tests for success, validation failures, not-found, and audit behavior, using in-memory repositories where possible.
+- Repository tests for SQL mapping and persistence behavior when the project has a database-backed test setup.
+- DTO tests for conversion/defaults and serialization where the API contract needs them.
+- Handler/router tests for HTTP method, path, status, response shape, and error mapping.
+- Tests for transaction behavior when an operation coordinates multiple repositories.
+
+Prefer asserting the specific result or error rather than only checking `is_ok()` or `is_err()`.
+
+## Checklist for AI-assisted CRUD generation
+
+Before changing code, inspect the reference files listed above and the target API's existing modules. Then:
+
+1. Identify the entity fields, invariants, audit requirements, soft-delete policy, tenant scope, and any domain events from the task or existing code. Do not invent missing business rules.
+2. Add or update the domain entity, typed ID, repository contract, and entity error constants.
+3. Add application request types and one service per required CRUD operation; reuse shared pagination, error, audit, and persistence types where suitable.
+4. Add PostgreSQL and in-memory adapters that implement the same contract.
+5. Add input/query/response DTOs, conversions, handlers, routes, and `AppState` wiring.
+6. Add migrations only when the schema needs a change; follow the project's existing migration naming and conventions.
+7. Add required events only when specified or already established for that domain.
+8. Add the layer-appropriate tests from the checklist above.
+9. Run formatting, the narrow crate check, and relevant tests; report any unavailable integration dependencies instead of claiming they passed.
+10. Summarize created/changed files, API routes, assumptions, and verification results.
+
+For lower-cost generation, pass this document plus only the relevant `organization-api` reference files and the target API's current files. Avoid including unrelated APIs, deployment manifests, or the entire repository unless the task requires them.

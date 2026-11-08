@@ -128,6 +128,13 @@ Follow the existing status convention: create returns `201 Created`, read/update
 - If an event and a database mutation must be atomic together, do not assume the current post-commit publish flow provides that guarantee. Use an explicitly designed outbox or equivalent mechanism if that guarantee is required.
 - Keep transaction boundaries in the persistence/application coordination layer, not in HTTP handlers.
 
+## Database migrations
+
+- Put migrations for tables owned by reusable entities from `crates/shared` in `crates/shared/migrations/` and expose them through the shared crate's migrator.
+- Keep service-specific migrations in that API's `migrations/` directory. When a service entity references a shared entity, put the foreign key, join column, and related index in the service migration; do not make the shared entity migration alter service-owned tables.
+- Each API combines the shared migrator with its own migrator and runs the combined, version-ordered set using that API's migration history table (`organization_api_migrations` or `client_api_migrations`). Migration versions must be unique across the combined set.
+- When the database is intentionally reset, keep migration setup simple: run the composed migrator from an empty schema and do not add legacy-history copying or reconciliation. Keep shared table creation idempotent with `CREATE TABLE IF NOT EXISTS`, since each API has a separate migration history and may execute the shared migration.
+
 ## Tests expected for a new CRUD
 
 Add tests at the layer where behavior belongs:

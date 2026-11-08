@@ -9,9 +9,7 @@ pub use config::DatabaseConnectionConfig;
 pub use connection::DatabaseConnection;
 pub use error::DatabaseError;
 pub use executor::ConnectionExecutor;
-pub use tenant_provisioning::{
-    migrator_with_table, prepare_migration_history, provision_tenant_schema,
-};
+pub use tenant_provisioning::{combine_migrators, migrator_with_table, provision_tenant_schema};
 pub use unit_of_work::UnitOfWork;
 
 // Re-export sqlx core types for convenience

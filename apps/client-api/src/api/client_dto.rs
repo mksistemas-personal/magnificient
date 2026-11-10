@@ -36,6 +36,7 @@ pub struct UpdateClientDto {
     pub name: String,
     pub nickname: Option<String>,
     pub second_address: Option<Address>,
+    #[serde(default = "default_user")]
     pub updated_by: String,
 }
 

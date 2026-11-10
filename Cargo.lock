@@ -476,12 +476,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "client-contracts"
+version = "0.1.0"
+dependencies = [
+ "common-contracts",
+ "serde",
+]
+
+[[package]]
 name = "cliente-api"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "client-contracts",
  "config",
  "database",
  "lapin",
@@ -533,6 +542,13 @@ checksum = "4356eba6976435498d05a311ee9fc486da3bc81c200d3f0d7dd9703b41913f92"
 dependencies = [
  "bytes",
  "memchr",
+]
+
+[[package]]
+name = "common-contracts"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -1890,6 +1906,7 @@ dependencies = [
  "database",
  "lapin",
  "messaging",
+ "organization-contracts",
  "rabbit_warren",
  "serde",
  "serde_json",
@@ -1901,6 +1918,14 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tsid",
+]
+
+[[package]]
+name = "organization-contracts"
+version = "0.1.0"
+dependencies = [
+ "common-contracts",
+ "serde",
 ]
 
 [[package]]

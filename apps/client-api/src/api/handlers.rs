@@ -7,10 +7,11 @@ use crate::application::{
     CreateClientRequest, DeleteClientRequest, FindClientsRequest, GetClientByIdRequest,
 };
 use crate::domain::ClientId;
-use crate::domain::message_events::ClientEvent;
 use axum::extract::{Path, Query, State};
 use axum::{Json, http::StatusCode, response::IntoResponse};
+use client_contracts::v1::{ClientAddress, ClientEvent, EVENT_NAME, EVENT_VERSION};
 use messaging::{MessageHeaders, MessagePublisher};
+use shared::entities::Address;
 use shared::errors::api_error::ApiError;
 use shared::types::PageRequest;
 use tsid::TSID;
@@ -42,9 +43,7 @@ async fn tenant_state(state: &AppState, tenant: &str) -> Result<AppState, ApiErr
 
 const CLIENT_EXCHANGE_NAME: &str = "client.output";
 const ROUTING_KEY: &str = "*";
-const EVENT_TYPE: &str = "ClientEvent";
 const EVENT_SOURCE: &str = "client-api";
-const EVENT_VERSION: i32 = 100;
 
 pub async fn create_client(
     State(state): State<AppState>,
@@ -58,7 +57,7 @@ pub async fn create_client(
         .execute(request)
         .await
         .map_err(map_api_error)?;
-    let event = ClientEvent::add(&client);
+    let event = client_added_event(&client);
     publish_message(state, &event).await?;
     Ok((StatusCode::CREATED, Json(ClientResponseDto::from(client))))
 }
@@ -75,7 +74,7 @@ pub async fn update_client(
         .execute(request)
         .await
         .map_err(map_api_error)?;
-    let event = ClientEvent::update(&client);
+    let event = client_updated_event(&client);
     publish_message(state, &event).await?;
     Ok((StatusCode::OK, Json(ClientResponseDto::from(client))))
 }
@@ -95,7 +94,7 @@ pub async fn delete_client(
         })
         .await
         .map_err(map_api_error)?;
-    let event = ClientEvent::delete(client_id);
+    let event = ClientEvent::delete(client_id.to_string());
     publish_message(state, &event).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -108,7 +107,7 @@ async fn publish_message(state: AppState, event: &ClientEvent) -> Result<(), Api
                 ROUTING_KEY,
                 event,
                 Some(MessageHeaders::create_default(
-                    EVENT_TYPE,
+                    EVENT_NAME,
                     EVENT_SOURCE,
                     EVENT_VERSION,
                     state.tenant.as_str(),
@@ -117,6 +116,42 @@ async fn publish_message(state: AppState, event: &ClientEvent) -> Result<(), Api
             .await?;
     }
     Ok(())
+}
+
+fn client_added_event(client: &crate::domain::Client) -> ClientEvent {
+    ClientEvent::add(
+        client.id.to_string(),
+        client.organization_id.to_string(),
+        client.name.clone(),
+        client.nickname.clone(),
+        client.second_address.as_ref().map(client_address_event),
+    )
+}
+
+fn client_updated_event(client: &crate::domain::Client) -> ClientEvent {
+    ClientEvent::update(
+        client.id.to_string(),
+        client.organization_id.to_string(),
+        client.name.clone(),
+        client.nickname.clone(),
+        client.second_address.as_ref().map(client_address_event),
+    )
+}
+
+fn client_address_event(address: &Address) -> ClientAddress {
+    ClientAddress {
+        street: address.street.clone(),
+        number: address.number.clone(),
+        complement: address.complement.clone(),
+        neighborhood: address.neighborhood.clone(),
+        city: address.city.clone(),
+        state: address.state.clone(),
+        state_code: address.state_code.clone(),
+        postal_code: address.postal_code.clone(),
+        country: address.country.clone(),
+        country_code: address.country_code.clone(),
+        reference: address.reference.clone(),
+    }
 }
 
 pub async fn get_client(

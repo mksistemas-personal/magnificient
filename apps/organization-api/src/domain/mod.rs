@@ -1,6 +1,5 @@
 // Modelos e regras de domínio
 
-pub mod message_events;
 pub mod organization;
 pub mod organization_repository;
 

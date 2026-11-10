@@ -8,11 +8,14 @@ use crate::application::{
     AddOrganizationRequest, DeleteOrganizationRequest, FindAllOrganizationsRequest,
     FindOrganizationByIdRequest, UpdateOrganizationRequest,
 };
-use crate::domain::OrganizationId;
-use crate::domain::message_events::OrganizationEvent;
+use crate::domain::{Organization, OrganizationId};
 use axum::extract::{Path, Query, State};
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use messaging::{MessageHeaders, MessagePublisher};
+use organization_contracts::v1::{
+    EVENT_NAME, EVENT_VERSION, OrganizationAddress, OrganizationDocument, OrganizationEvent,
+};
+use shared::entities::{Address, Document};
 use shared::errors::api_error::ApiError;
 use tsid::TSID;
 
@@ -94,9 +97,7 @@ pub async fn get_all_organizations_for_tenant(
 const ORGANIZATION_EXCHANGE_NAME: &str = "organization.output";
 const ROUTING_KEY: &str = "*";
 
-const EVENT_TYPE: &str = "OrganizationEvent";
 const EVENT_SOURCE: &str = "organization-api";
-const EVENT_VERSION: i32 = 100;
 
 pub async fn create_organization(
     State(state): State<AppState>,
@@ -105,7 +106,7 @@ pub async fn create_organization(
     let request: AddOrganizationRequest = payload.try_into()?;
     let organization = state.add_organization_use_case.execute(request).await?;
     let response = OrganizationResponseDto::from(organization.clone());
-    let event = OrganizationEvent::add(organization.clone());
+    let event = organization_added_event(&organization);
     publish_message(state, &event).await?;
     Ok((StatusCode::CREATED, Json(response)))
 }
@@ -119,7 +120,7 @@ pub async fn update_organization(
     let request: UpdateOrganizationRequest = payload.into_request(organization_id);
     let organization = state.update_organization_use_case.execute(request).await?;
     let response = OrganizationResponseDto::from(organization.clone());
-    let event = OrganizationEvent::update(organization.clone());
+    let event = organization_updated_event(&organization);
     publish_message(state, &event).await?;
     Ok((StatusCode::OK, Json(response)))
 }
@@ -132,7 +133,7 @@ pub async fn delete_organization(
     let organization_id: OrganizationId = id.into();
     let request: DeleteOrganizationRequest = params.into_request(organization_id);
     state.delete_organization_use_case.execute(request).await?;
-    let event = OrganizationEvent::delete(organization_id);
+    let event = OrganizationEvent::delete(organization_id.to_string());
     publish_message(state, &event).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -145,7 +146,7 @@ async fn publish_message(state: AppState, event: &OrganizationEvent) -> Result<(
                 ROUTING_KEY,
                 &event,
                 Some(MessageHeaders::create_default(
-                    EVENT_TYPE,
+                    EVENT_NAME,
                     EVENT_SOURCE,
                     EVENT_VERSION,
                     state.tenant.as_str(),
@@ -154,6 +155,54 @@ async fn publish_message(state: AppState, event: &OrganizationEvent) -> Result<(
             .await?;
     }
     Ok(())
+}
+
+fn organization_added_event(organization: &Organization) -> OrganizationEvent {
+    OrganizationEvent::add(
+        organization.id.to_string(),
+        organization.name.to_string(),
+        organization_document_event(&organization.document),
+        organization
+            .address
+            .as_ref()
+            .map(organization_address_event),
+    )
+}
+
+fn organization_updated_event(organization: &Organization) -> OrganizationEvent {
+    OrganizationEvent::update(
+        organization.id.to_string(),
+        organization.name.clone(),
+        organization_document_event(&organization.document),
+        organization
+            .address
+            .as_ref()
+            .map(organization_address_event),
+    )
+}
+
+fn organization_document_event(document: &Document) -> OrganizationDocument {
+    OrganizationDocument {
+        value: document.value.to_string(),
+        document_type: document.document_type.code().to_string(),
+        country: document.country().map(|country| country.code().to_string()),
+    }
+}
+
+fn organization_address_event(address: &Address) -> OrganizationAddress {
+    OrganizationAddress {
+        street: address.street.clone(),
+        number: address.number.clone(),
+        complement: address.complement.clone(),
+        neighborhood: address.neighborhood.clone(),
+        city: address.city.clone(),
+        state: address.state.clone(),
+        state_code: address.state_code.clone(),
+        postal_code: address.postal_code.clone(),
+        country: address.country.clone(),
+        country_code: address.country_code.clone(),
+        reference: address.reference.clone(),
+    }
 }
 
 pub async fn get_by_id_organization(

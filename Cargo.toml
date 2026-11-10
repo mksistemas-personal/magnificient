@@ -7,6 +7,9 @@ members = [
     "crates/shared",
     "crates/database",
     "crates/messaging",
+    "crates/organization-contracts",
+    "crates/client-contracts",
+    "crates/common-contracts",
 ]
 
 [workspace.package]

@@ -7,8 +7,10 @@ use crate::application::{
     CreateClientRequest, DeleteClientRequest, FindClientsRequest, GetClientByIdRequest,
 };
 use crate::domain::ClientId;
+use crate::domain::message_events::ClientEvent;
 use axum::extract::{Path, Query, State};
 use axum::{Json, http::StatusCode, response::IntoResponse};
+use messaging::{MessageHeaders, MessagePublisher};
 use shared::errors::api_error::ApiError;
 use shared::types::PageRequest;
 use tsid::TSID;
@@ -33,8 +35,16 @@ async fn tenant_state(state: &AppState, tenant: &str) -> Result<AppState, ApiErr
     .await
     .map_err(|error| ApiError::Internal(format!("Failed to resolve tenant: {error}")))?;
     let schema = schema.ok_or_else(|| ApiError::NotFound("Tenant not found".into()))?;
-    state.for_tenant_schema(&schema).map_err(ApiError::from)
+    state
+        .for_tenant_schema(&schema, tenant)
+        .map_err(ApiError::from)
 }
+
+const CLIENT_EXCHANGE_NAME: &str = "client.output";
+const ROUTING_KEY: &str = "*";
+const EVENT_TYPE: &str = "ClientEvent";
+const EVENT_SOURCE: &str = "client-api";
+const EVENT_VERSION: i32 = 100;
 
 pub async fn create_client(
     State(state): State<AppState>,
@@ -48,6 +58,8 @@ pub async fn create_client(
         .execute(request)
         .await
         .map_err(map_api_error)?;
+    let event = ClientEvent::add(&client);
+    publish_message(state, &event).await?;
     Ok((StatusCode::CREATED, Json(ClientResponseDto::from(client))))
 }
 
@@ -63,6 +75,8 @@ pub async fn update_client(
         .execute(request)
         .await
         .map_err(map_api_error)?;
+    let event = ClientEvent::update(&client);
+    publish_message(state, &event).await?;
     Ok((StatusCode::OK, Json(ClientResponseDto::from(client))))
 }
 
@@ -72,15 +86,37 @@ pub async fn delete_client(
     Query(params): Query<DeleteClientParams>,
 ) -> Result<impl IntoResponse, ApiError> {
     let state = tenant_state(&state, &tenant).await?;
+    let client_id = ClientId::new(id);
     state
         .delete_client
         .execute(DeleteClientRequest {
-            id: ClientId::new(id),
+            id: client_id,
             updated_by: params.updated_by,
         })
         .await
         .map_err(map_api_error)?;
+    let event = ClientEvent::delete(client_id);
+    publish_message(state, &event).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn publish_message(state: AppState, event: &ClientEvent) -> Result<(), ApiError> {
+    if let Some(publisher) = state.message_publisher.as_ref() {
+        publisher
+            .publish_json(
+                CLIENT_EXCHANGE_NAME,
+                ROUTING_KEY,
+                event,
+                Some(MessageHeaders::create_default(
+                    EVENT_TYPE,
+                    EVENT_SOURCE,
+                    EVENT_VERSION,
+                    state.tenant.as_str(),
+                )),
+            )
+            .await?;
+    }
+    Ok(())
 }
 
 pub async fn get_client(

@@ -2,6 +2,7 @@ use crate::application::{CreateClientRequest, UpdateClientRequest};
 use crate::domain::{Client, ClientId, OrganizationId};
 use crate::errors::ClientBusinessErrors;
 use serde::{Deserialize, Serialize};
+use shared::entities::converter::serde_functions::default_user;
 use shared::entities::{Address, AuditFields};
 use shared::errors::api_error::ApiError;
 
@@ -11,6 +12,7 @@ pub struct CreateClientDto {
     pub name: String,
     pub nickname: Option<String>,
     pub second_address: Option<Address>,
+    #[serde(default = "default_user")]
     pub created_by: String,
 }
 
@@ -34,6 +36,7 @@ pub struct UpdateClientDto {
     pub name: String,
     pub nickname: Option<String>,
     pub second_address: Option<Address>,
+    #[serde(default = "default_user")]
     pub updated_by: String,
 }
 

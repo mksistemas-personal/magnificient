@@ -2,6 +2,7 @@
 
 pub mod address;
 pub mod audit;
+pub mod converter;
 pub mod document;
 pub mod identifier;
 pub mod use_case;

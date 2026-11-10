@@ -10,6 +10,9 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/shared/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/apps/organization-api/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/client-contracts/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/common-contracts/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/organization-contracts/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

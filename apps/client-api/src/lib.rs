@@ -1,6 +1,7 @@
 pub mod api;
 pub mod application;
 pub mod config;
+pub mod consumer;
 pub mod domain;
 pub mod errors;
 pub mod infrastructure;

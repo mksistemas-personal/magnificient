@@ -1,5 +1,6 @@
 #[allow(clippy::module_inception)]
 pub mod address;
+pub mod address_event;
 pub mod errors;
 pub mod repository;
 pub mod validator;

@@ -1,6 +1,6 @@
 use crate::domain::Client;
 use serde::{Deserialize, Serialize};
-use shared::entities::Address;
+use shared::entities::address::address_event::AddressEvent;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -21,40 +21,7 @@ pub struct ClientEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nickname: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub second_address: Option<ClientAddressEvent>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ClientAddressEvent {
-    pub street: String,
-    pub number: String,
-    pub complement: String,
-    pub neighborhood: String,
-    pub city: String,
-    pub state: String,
-    pub state_code: String,
-    pub postal_code: String,
-    pub country: String,
-    pub country_code: String,
-    pub reference: String,
-}
-
-impl From<&Address> for ClientAddressEvent {
-    fn from(address: &Address) -> Self {
-        Self {
-            street: address.street.clone(),
-            number: address.number.clone(),
-            complement: address.complement.clone(),
-            neighborhood: address.neighborhood.clone(),
-            city: address.city.clone(),
-            state: address.state.clone(),
-            state_code: address.state_code.clone(),
-            postal_code: address.postal_code.clone(),
-            country: address.country.clone(),
-            country_code: address.country_code.clone(),
-            reference: address.reference.clone(),
-        }
-    }
+    pub second_address: Option<AddressEvent>,
 }
 
 impl ClientEvent {

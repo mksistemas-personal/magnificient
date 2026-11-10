@@ -125,6 +125,9 @@ Follow the existing status convention: create returns `201 Created`, read/update
 - Use `BusinessError::internal` for unexpected persistence failures; preserve the underlying error for logs/diagnostics, not as a misleading not-found response.
 - Map domain errors to HTTP status codes through the shared API error conversion.
 - Publish events only when the API/domain requires them. `organization-api` publishes create/update/delete events after its use case succeeds; this is not an automatic requirement for every CRUD.
+- For an event-producing API, publish one event after each successful create, update, and delete use case. Keep the event enum/payload in `domain/message_events.rs`; use explicit payload DTOs, stable kebab-case event names, and include only fields intended for consumers. Delete events should at least carry the aggregate ID.
+- Use the shared `messaging::RabbitMqConfig`, `create_rabbitmq_client`, `RabbitMqPublisher`, `MessagePublisher`, and `MessageHeaders` abstractions. Add RabbitMQ settings to the API config and its default TOML, declare the durable output exchange during startup, and inject the optional publisher through `AppState`. Tenant-scoped state must preserve the tenant value for message headers.
+- Publish only after persistence succeeds and before returning the successful HTTP response, following `organization-api`. Map publish failures through the existing API error path. This preserves current behavior; it does not make publishing atomic with the database transaction.
 - If an event and a database mutation must be atomic together, do not assume the current post-commit publish flow provides that guarantee. Use an explicitly designed outbox or equivalent mechanism if that guarantee is required.
 - Keep transaction boundaries in the persistence/application coordination layer, not in HTTP handlers.
 

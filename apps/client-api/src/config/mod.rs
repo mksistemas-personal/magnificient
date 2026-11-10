@@ -1,11 +1,13 @@
 use config::{Config, ConfigError};
 use database::DatabaseConnectionConfig;
+use messaging::RabbitMqConfig;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ClientAppConfig {
     pub server: ServerConfig,
     pub database: DatabaseConnectionConfig,
+    pub rabbitmq: RabbitMqConfig,
     pub logging: LoggingConfig,
 }
 

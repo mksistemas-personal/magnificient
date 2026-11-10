@@ -1,8 +1,10 @@
 use cliente_api::api::{AppState, create_router};
 use cliente_api::config::ClientAppConfig;
+use cliente_api::infrastructure::RabbitmqSeed;
 use database::{
     DatabaseConnection, combine_migrators, migrator_with_table, provision_tenant_schema,
 };
+use messaging::{RabbitMqPublisher, create_rabbitmq_client};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
@@ -38,12 +40,22 @@ async fn setup_database(
     Ok(db)
 }
 
+async fn setup_messaging(
+    config: &ClientAppConfig,
+) -> Result<Arc<RabbitMqPublisher>, Box<dyn std::error::Error>> {
+    info!("Initializing RabbitMQ publisher...");
+    let rabbitmq_client = create_rabbitmq_client(&config.rabbitmq).await?;
+    RabbitmqSeed::new(&rabbitmq_client).create().await?;
+    Ok(Arc::new(RabbitMqPublisher::new(rabbitmq_client)))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Arc::new(ClientAppConfig::load()?);
     init_tracing(&config);
     let db = setup_database(&config).await?;
-    let state = AppState::new(config.clone(), db);
+    let message_publisher = setup_messaging(&config).await?;
+    let state = AppState::new_with_publisher(config.clone(), db, message_publisher);
     let address = format!("{}:{}", config.server.host, config.server.port);
     let listener = TcpListener::bind(&address).await?;
     info!("Client API listening on http://{address}");

@@ -1,3 +1,3 @@
-mod organization_event_consumer;
+mod organization_event_handler;
 
-pub use organization_event_consumer::OrganizationEventConsumer;
+pub use organization_event_handler::OrganizationEventHandler;

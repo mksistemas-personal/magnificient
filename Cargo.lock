@@ -1743,6 +1743,7 @@ dependencies = [
  "lapin",
  "rabbit_warren",
  "serde",
+ "serde_json",
  "shared",
  "uuid",
 ]

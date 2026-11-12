@@ -1,8 +1,78 @@
+use crate::api::AppState;
+use crate::application::{DeleteClientRequest, FindClientsRequest};
+use crate::domain::OrganizationId;
+use crate::infrastructure::tenant_state;
 use messaging::{MessageHandler, MessageHandlerError, MessageMetadata};
 use organization_contracts::v1::{OrganizationEvent, OrganizationEventType};
-use tracing::info;
+use shared::entities::BusinessError;
+use shared::types::PageRequest;
+use tracing::error;
 
-pub struct OrganizationEventHandler;
+pub struct OrganizationEventHandler {
+    state: AppState,
+}
+
+impl OrganizationEventHandler {
+    pub fn new(state: AppState) -> Self {
+        Self { state }
+    }
+
+    async fn delete_clients_for_organization(
+        &self,
+        event: &OrganizationEvent,
+        metadata: &MessageMetadata,
+    ) -> Result<(), MessageHandlerError> {
+        let tenant = metadata
+            .tenant
+            .as_deref()
+            .filter(|tenant| !tenant.is_empty())
+            .ok_or_else(|| {
+                MessageHandlerError::permanent("OrganizationEvent is missing tenant metadata")
+            })?;
+
+        let tenant_state = tenant_state(&self.state, tenant)
+            .await
+            .map_err(map_tenant_error)?;
+
+        let organization_id = event.id.parse::<OrganizationId>().map_err(|error| {
+            MessageHandlerError::permanent(format!(
+                "Invalid organization id '{}': {error}",
+                event.id
+            ))
+        })?;
+
+        // Page through matching clients, then invoke the existing delete use case
+        // for each client so its validation, audit fields, and UnitOfWork remain active.
+        loop {
+            let page = tenant_state
+                .find_clients
+                .execute(FindClientsRequest {
+                    name: None,
+                    organization_id: Some(organization_id),
+                    page_request: PageRequest::new(1, 100),
+                })
+                .await
+                .map_err(map_delete_error)?;
+
+            let clients = page.content;
+            if clients.is_empty() {
+                break;
+            }
+            for client in clients {
+                tenant_state
+                    .delete_client
+                    .execute(DeleteClientRequest {
+                        id: client.id,
+                        updated_by: "organization-api".to_owned(),
+                    })
+                    .await
+                    .map_err(map_delete_error)?;
+            }
+        }
+
+        Ok(())
+    }
+}
 
 #[async_trait::async_trait]
 impl MessageHandler<OrganizationEvent> for OrganizationEventHandler {
@@ -11,26 +81,30 @@ impl MessageHandler<OrganizationEvent> for OrganizationEventHandler {
         event: OrganizationEvent,
         metadata: MessageMetadata,
     ) -> Result<(), MessageHandlerError> {
-        process_organization_event(event, metadata);
+        if event.event_type == OrganizationEventType::DeleteOrganization {
+            self.delete_clients_for_organization(&event, &metadata)
+                .await?;
+        }
         Ok(())
     }
 }
 
-/// The Client API currently has no Organization read model to update; this
-/// handler dispatches and records the event metadata for operational visibility.
-fn process_organization_event(event: OrganizationEvent, metadata: MessageMetadata) {
-    let event_action = match event.event_type {
-        OrganizationEventType::AddOrganization => "add",
-        OrganizationEventType::UpdateOrganization => "update",
-        OrganizationEventType::DeleteOrganization => "delete",
-    };
-    info!(
-        organization_id = %event.id,
-        event_action,
-        event_type = %metadata.event_type,
-        event_version = metadata.version,
-        message_id = metadata.message_id.as_deref().unwrap_or("unknown"),
-        tenant = metadata.tenant.as_deref().unwrap_or("unknown"),
-        "Processed OrganizationEvent"
-    );
+fn map_tenant_error(error: shared::errors::api_error::ApiError) -> MessageHandlerError {
+    match error {
+        shared::errors::api_error::ApiError::Internal(_) => {
+            MessageHandlerError::retryable(error.to_string())
+        }
+        _ => MessageHandlerError::permanent(error.to_string()),
+    }
+}
+
+fn map_delete_error(error: BusinessError) -> MessageHandlerError {
+    match error {
+        BusinessError::NotFound(_) => MessageHandlerError::permanent(error.to_string()),
+        BusinessError::Internal(_) => {
+            error!(error = %error, "Client deletion failed while processing OrganizationEvent");
+            MessageHandlerError::retryable(error.to_string())
+        }
+        _ => MessageHandlerError::permanent(error.to_string()),
+    }
 }

@@ -44,20 +44,22 @@ async fn setup_database(
 
 async fn setup_messaging(
     config: &ClientAppConfig,
-) -> Result<(Arc<RabbitMqPublisher>, MessageConsumerRegistry), Box<dyn std::error::Error>> {
+    db: DatabaseConnection,
+) -> Result<(AppState, MessageConsumerRegistry), Box<dyn std::error::Error>> {
     info!("Initializing RabbitMQ publisher...");
     let publisher_client = create_rabbitmq_client(&config.rabbitmq).await?;
     RabbitmqSeed::new(&publisher_client).create().await?;
     let publisher = Arc::new(RabbitMqPublisher::new(publisher_client));
+    let state = AppState::new_with_publisher(Arc::new(config.clone()), db, publisher);
     let consumer_client = create_rabbitmq_client(&config.rabbitmq).await?;
     let mut registry = MessageConsumerRegistry::new(consumer_client);
     registry.register::<OrganizationEvent, _>(
         EVENT_NAME,
         EVENT_VERSION,
-        OrganizationEventHandler,
+        OrganizationEventHandler::new(state.clone()),
     )?;
     registry.start("client-input.main");
-    Ok((publisher, registry))
+    Ok((state, registry))
 }
 
 #[tokio::main]
@@ -67,8 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = setup_database(&config).await?;
     let address = format!("{}:{}", config.server.host, config.server.port);
     let listener = TcpListener::bind(&address).await?;
-    let (message_publisher, consumer_registry) = setup_messaging(&config).await?;
-    let state = AppState::new_with_publisher(config.clone(), db, message_publisher);
+    let (state, consumer_registry) = setup_messaging(&config, db).await?;
 
     info!("Client API listening on http://{address}");
     let server_result = axum::serve(listener, create_router(state)).await;

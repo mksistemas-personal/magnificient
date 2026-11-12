@@ -7,6 +7,8 @@ use database::{
 };
 use messaging::{MessageConsumerRegistry, RabbitMqPublisher, create_rabbitmq_client};
 use organization_contracts::v1::{EVENT_NAME, EVENT_VERSION, OrganizationEvent};
+use rabbit_warren::RmqClient;
+use std::error::Error;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
@@ -52,6 +54,16 @@ async fn setup_messaging(
     let publisher = Arc::new(RabbitMqPublisher::new(publisher_client));
     let state = AppState::new_with_publisher(Arc::new(config.clone()), db, publisher);
     let consumer_client = create_rabbitmq_client(&config.rabbitmq).await?;
+
+    let registry = register_events(&state, consumer_client)?;
+
+    Ok((state, registry))
+}
+
+fn register_events(
+    state: &AppState,
+    consumer_client: RmqClient,
+) -> Result<MessageConsumerRegistry, Box<dyn Error>> {
     let mut registry = MessageConsumerRegistry::new(consumer_client);
     registry.register::<OrganizationEvent, _>(
         EVENT_NAME,
@@ -59,7 +71,7 @@ async fn setup_messaging(
         OrganizationEventHandler::new(state.clone()),
     )?;
     registry.start("client-input.main");
-    Ok((state, registry))
+    Ok(registry)
 }
 
 #[tokio::main]

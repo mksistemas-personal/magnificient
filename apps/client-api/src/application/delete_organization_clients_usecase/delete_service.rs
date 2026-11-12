@@ -25,7 +25,7 @@ impl DeleteOrganizationClientsService {
                 .find_page(
                     None,
                     Some(request.organization_id.value()),
-                    PageRequest::new(1, 100),
+                    PageRequest::new(1, 20),
                 )
                 .await?;
             if page.content.is_empty() {

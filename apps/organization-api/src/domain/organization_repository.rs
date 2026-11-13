@@ -1,3 +1,4 @@
+use crate::domain::OrganizationEntityType;
 use crate::domain::organization::Organization;
 use crate::domain::organization_link::OrganizationLink;
 use async_trait::async_trait;
@@ -54,4 +55,12 @@ pub trait OrganizationRepository: Send + Sync {
         conn: &mut PgConnection,
         link: &OrganizationLink,
     ) -> Result<OrganizationLink, BusinessError>;
+
+    /// Removes any link between an organization and another entity.
+    async fn unlink_entity(
+        &self,
+        conn: &mut PgConnection,
+        entity_id: TSID,
+        entity_type: OrganizationEntityType,
+    ) -> Result<(), BusinessError>;
 }

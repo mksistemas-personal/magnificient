@@ -17,6 +17,17 @@ pub fn create_router(state: AppState) -> Router {
         .route("/health", get(health::health_check))
         .route("/api/v1/health", get(health::health_check))
         .route(
+            "/api/v1/organizations",
+            post(organizations_controller::create_organization)
+                .get(organizations_controller::get_all_organizations),
+        )
+        .route(
+            "/api/v1/organizations/{id}",
+            put(organizations_controller::update_organization)
+                .delete(organizations_controller::delete_organization)
+                .get(organizations_controller::get_by_id_organization),
+        )
+        .route(
             "/api/v1/{tenant}/organizations",
             post(organizations_controller::create_organization_for_tenant)
                 .get(organizations_controller::get_all_organizations_for_tenant),

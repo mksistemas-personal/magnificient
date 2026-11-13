@@ -9,19 +9,19 @@ pub struct InitialContextData {
 }
 
 pub struct EventValidatedContextData {
-    pub event_id: String,
-    pub organization_id: String,
+    pub client_id: String,
+    pub organization_id: Option<String>,
     pub tenant: String,
 }
 
 pub struct TenantResolvedContextData {
-    pub event_id: String,
-    pub organization_id: String,
+    pub client_id: String,
+    pub organization_id: Option<String>,
     pub tenant_state: AppState,
 }
 
 pub struct ClientIdParsedContextData {
-    pub organization_id: OrganizationId,
     pub client_id: ClientId,
+    pub organization_id: Option<OrganizationId>,
     pub tenant_state: AppState,
 }

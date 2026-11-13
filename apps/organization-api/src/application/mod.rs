@@ -7,6 +7,7 @@ mod delete_usecase;
 mod link_client_organization_usecase;
 mod persistence;
 pub mod service_constructors;
+mod unlink_client_organization_usecase;
 mod update_usecase;
 
 pub use crate::errors::{OrganizationBusinessErrors, OrganizationErrors};
@@ -25,4 +26,7 @@ pub use link_client_organization_usecase::{
 };
 pub use persistence::OrganizationPersistence;
 pub use service_constructors::FromPersistence;
+pub use unlink_client_organization_usecase::{
+    UnlinkClientOrganizationRequest, UnlinkClientOrganizationService,
+};
 pub use update_usecase::{UpdateOrganizationRequest, UpdateOrganizationService};

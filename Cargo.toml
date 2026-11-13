@@ -7,9 +7,12 @@ members = [
     "crates/shared",
     "crates/database",
     "crates/messaging",
+    "crates/organization-contracts",
+    "crates/client-contracts",
+    "crates/common-contracts",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-authors = []
+authors = ["Mauricio Kiniz"]

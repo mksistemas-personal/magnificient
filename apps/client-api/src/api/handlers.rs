@@ -7,44 +7,19 @@ use crate::application::{
     CreateClientRequest, DeleteClientRequest, FindClientsRequest, GetClientByIdRequest,
 };
 use crate::domain::ClientId;
-use crate::domain::message_events::ClientEvent;
+use crate::infrastructure::tenant_state;
 use axum::extract::{Path, Query, State};
 use axum::{Json, http::StatusCode, response::IntoResponse};
+use client_contracts::v1::{ClientAddress, ClientEvent, EVENT_NAME, EVENT_VERSION};
 use messaging::{MessageHeaders, MessagePublisher};
+use shared::entities::Address;
 use shared::errors::api_error::ApiError;
 use shared::types::PageRequest;
 use tsid::TSID;
 
-async fn tenant_state(state: &AppState, tenant: &str) -> Result<AppState, ApiError> {
-    let valid = !tenant.is_empty()
-        && tenant.len() <= 56
-        && tenant.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
-        && tenant.ends_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
-        && tenant
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-        && !tenant.contains("--");
-    if !valid {
-        return Err(ApiError::BadRequest("Invalid tenant identifier".into()));
-    }
-    let schema: Option<String> = sqlx::query_scalar(
-        "SELECT schema_name FROM public.tenants WHERE slug = $1 AND active = TRUE",
-    )
-    .bind(tenant)
-    .fetch_optional(state.db.pool())
-    .await
-    .map_err(|error| ApiError::Internal(format!("Failed to resolve tenant: {error}")))?;
-    let schema = schema.ok_or_else(|| ApiError::NotFound("Tenant not found".into()))?;
-    state
-        .for_tenant_schema(&schema, tenant)
-        .map_err(ApiError::from)
-}
-
 const CLIENT_EXCHANGE_NAME: &str = "client.output";
 const ROUTING_KEY: &str = "*";
-const EVENT_TYPE: &str = "ClientEvent";
 const EVENT_SOURCE: &str = "client-api";
-const EVENT_VERSION: i32 = 100;
 
 pub async fn create_client(
     State(state): State<AppState>,
@@ -58,7 +33,7 @@ pub async fn create_client(
         .execute(request)
         .await
         .map_err(map_api_error)?;
-    let event = ClientEvent::add(&client);
+    let event = client_added_event(&client);
     publish_message(state, &event).await?;
     Ok((StatusCode::CREATED, Json(ClientResponseDto::from(client))))
 }
@@ -75,7 +50,7 @@ pub async fn update_client(
         .execute(request)
         .await
         .map_err(map_api_error)?;
-    let event = ClientEvent::update(&client);
+    let event = client_updated_event(&client);
     publish_message(state, &event).await?;
     Ok((StatusCode::OK, Json(ClientResponseDto::from(client))))
 }
@@ -95,7 +70,7 @@ pub async fn delete_client(
         })
         .await
         .map_err(map_api_error)?;
-    let event = ClientEvent::delete(client_id);
+    let event = ClientEvent::delete(client_id.to_string());
     publish_message(state, &event).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -108,7 +83,7 @@ async fn publish_message(state: AppState, event: &ClientEvent) -> Result<(), Api
                 ROUTING_KEY,
                 event,
                 Some(MessageHeaders::create_default(
-                    EVENT_TYPE,
+                    EVENT_NAME,
                     EVENT_SOURCE,
                     EVENT_VERSION,
                     state.tenant.as_str(),
@@ -117,6 +92,42 @@ async fn publish_message(state: AppState, event: &ClientEvent) -> Result<(), Api
             .await?;
     }
     Ok(())
+}
+
+fn client_added_event(client: &crate::domain::Client) -> ClientEvent {
+    ClientEvent::add(
+        client.id.to_string(),
+        client.organization_id.to_string(),
+        client.name.clone(),
+        client.nickname.clone(),
+        client.second_address.as_ref().map(client_address_event),
+    )
+}
+
+fn client_updated_event(client: &crate::domain::Client) -> ClientEvent {
+    ClientEvent::update(
+        client.id.to_string(),
+        client.organization_id.to_string(),
+        client.name.clone(),
+        client.nickname.clone(),
+        client.second_address.as_ref().map(client_address_event),
+    )
+}
+
+fn client_address_event(address: &Address) -> ClientAddress {
+    ClientAddress {
+        street: address.street.clone(),
+        number: address.number.clone(),
+        complement: address.complement.clone(),
+        neighborhood: address.neighborhood.clone(),
+        city: address.city.clone(),
+        state: address.state.clone(),
+        state_code: address.state_code.clone(),
+        postal_code: address.postal_code.clone(),
+        country: address.country.clone(),
+        country_code: address.country_code.clone(),
+        reference: address.reference.clone(),
+    }
 }
 
 pub async fn get_client(

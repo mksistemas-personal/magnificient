@@ -1,4 +1,5 @@
 use crate::domain::organization::{Organization, OrganizationId};
+use crate::domain::organization_link::OrganizationLink;
 use crate::domain::organization_repository::OrganizationRepository;
 use crate::errors::OrganizationBusinessErrors;
 use async_trait::async_trait;
@@ -321,6 +322,50 @@ impl PostgresOrganizationRepository {
 
         Ok(total as u64)
     }
+
+    /// Executa a inserção do vínculo entre uma organização e outra entidade no PostgreSQL.
+    async fn execute_link_entity(
+        conn: &mut PgConnection,
+        link: &OrganizationLink,
+    ) -> Result<OrganizationLink, BusinessError> {
+        let id_raw = link.id().number() as i64;
+        let org_id_raw = link.organization_id().number() as i64;
+        let entity_id_raw = link.entity_id().number() as i64;
+        let entity_type_str = link.entity_type().as_str();
+
+        let query = r#"
+            INSERT INTO organization_links (
+                id, organization_id, entity_id, entity_type,
+                linked_at, created_at, created_by
+            )
+            VALUES ($1, $2, $3, $4::organization_entity_type, $5, $6, $7)
+        "#;
+
+        sqlx::query(query)
+            .bind(id_raw)
+            .bind(org_id_raw)
+            .bind(entity_id_raw)
+            .bind(entity_type_str)
+            .bind(link.linked_at())
+            .bind(link.created_at())
+            .bind(link.created_by())
+            .execute(&mut *conn)
+            .await
+            .map_err(|err| {
+                if let Some(db_err) = err.as_database_error() {
+                    if db_err.code().as_deref() == Some("23505") {
+                        return OrganizationBusinessErrors::already_exists();
+                    }
+                    if db_err.code().as_deref() == Some("23503") {
+                        return OrganizationBusinessErrors::not_found();
+                    }
+                }
+                error!("Failed to link entity to organization in the database: {:?}", err);
+                BusinessError::internal(format!("Failed to persist organization link: {err}"))
+            })?;
+
+        Ok(link.clone())
+    }
 }
 
 impl From<PgPool> for PostgresOrganizationRepository {
@@ -383,6 +428,14 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         name: Option<&str>,
     ) -> Result<u64, BusinessError> {
         Self::execute_count(conn, name).await
+    }
+
+    async fn link_entity(
+        &self,
+        conn: &mut PgConnection,
+        link: &OrganizationLink,
+    ) -> Result<OrganizationLink, BusinessError> {
+        Self::execute_link_entity(conn, link).await
     }
 }
 

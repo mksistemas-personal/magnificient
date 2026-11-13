@@ -1,7 +1,7 @@
 use crate::application::{
     ClientPersistence, CreateClientRequest, CreateClientService, DeleteClientRequest,
-    DeleteClientService, FindClientsRequest, FindClientsService, GetClientByIdRequest,
-    GetClientByIdService, UpdateClientRequest, UpdateClientService,
+    DeleteClientService, DeleteOrganizationClientsService, FindClientsRequest, FindClientsService,
+    GetClientByIdRequest, GetClientByIdService, UpdateClientRequest, UpdateClientService,
 };
 use crate::config::ClientAppConfig;
 use crate::domain::Client;
@@ -26,6 +26,7 @@ pub struct AppState {
     pub create_client: Arc<dyn AsyncAddEntityUseCase<CreateClientRequest, Client>>,
     pub update_client: Arc<dyn AsyncUpdateEntityUseCase<UpdateClientRequest, Client>>,
     pub delete_client: Arc<dyn AsyncDeleteEntityUseCase<DeleteClientRequest, ()>>,
+    pub delete_organization_clients: Arc<DeleteOrganizationClientsService>,
     pub get_client: Arc<dyn AsyncGetByIdUseCase<GetClientByIdRequest, Client>>,
     pub find_clients: Arc<dyn AsyncGetAllUseCase<FindClientsRequest, Page<Client>>>,
 }
@@ -89,6 +90,9 @@ impl AppState {
             create_client: Arc::new(CreateClientService::new(persistence.clone())),
             update_client: Arc::new(UpdateClientService::new(persistence.clone())),
             delete_client: Arc::new(DeleteClientService::new(persistence.clone())),
+            delete_organization_clients: Arc::new(DeleteOrganizationClientsService::new(
+                persistence.clone(),
+            )),
             get_client: Arc::new(GetClientByIdService::new(persistence.clone())),
             find_clients: Arc::new(FindClientsService::new(persistence)),
         }

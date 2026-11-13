@@ -1,4 +1,4 @@
-use crate::domain::{Organization, OrganizationRepository};
+use crate::domain::{Organization, OrganizationLink, OrganizationRepository};
 use database::{ConnectionExecutor, UnitOfWork};
 use shared::entities::{AddressRepository, BusinessError};
 use shared::types::PageRequest;
@@ -103,6 +103,20 @@ impl OrganizationPersistence {
                         page_request.page_size,
                         total,
                     ))
+                })
+            })
+            .await
+    }
+
+    pub async fn link_entity(
+        &self,
+        link: OrganizationLink,
+    ) -> Result<OrganizationLink, BusinessError> {
+        let repository = Arc::clone(&self.repository);
+        self.executor
+            .run(move |conn| {
+                Box::pin(async move {
+                    repository.link_entity(conn, &link).await
                 })
             })
             .await

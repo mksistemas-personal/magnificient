@@ -4,6 +4,7 @@ mod add_usecase;
 mod all_usecase;
 mod by_id_usecase;
 mod delete_usecase;
+mod link_client_organization_usecase;
 mod persistence;
 pub mod service_constructors;
 mod update_usecase;
@@ -19,6 +20,9 @@ pub use by_id_usecase::{
     GetOrganizationByIdService,
 };
 pub use delete_usecase::{DeleteOrganizationRequest, DeleteOrganizationService};
+pub use link_client_organization_usecase::{
+    LinkClientOrganizationRequest, LinkClientOrganizationService,
+};
 pub use persistence::OrganizationPersistence;
 pub use service_constructors::FromPersistence;
 pub use update_usecase::{UpdateOrganizationRequest, UpdateOrganizationService};

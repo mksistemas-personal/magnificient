@@ -2,7 +2,8 @@ use crate::application::{
     AddOrganizationRequest, AddOrganizationService, DeleteOrganizationRequest,
     DeleteOrganizationService, FindAllOrganizationsRequest, FindAllOrganizationsService,
     FindOrganizationByIdRequest, FromPersistence, GetOrganizationByIdService,
-    OrganizationPersistence, UpdateOrganizationRequest, UpdateOrganizationService,
+    LinkClientOrganizationService, OrganizationPersistence, UpdateOrganizationRequest,
+    UpdateOrganizationService,
 };
 use crate::config::organization_config::OrganizationAppConfig;
 use crate::domain::organization::Organization;
@@ -36,6 +37,7 @@ pub struct AppState {
         Arc<dyn AsyncGetByIdUseCase<FindOrganizationByIdRequest, Organization>>,
     pub get_all_organization_use_case:
         Arc<dyn AsyncGetAllUseCase<FindAllOrganizationsRequest, Page<Organization>>>,
+    pub link_client_organization: Arc<LinkClientOrganizationService>,
 }
 
 impl AppState {
@@ -145,6 +147,9 @@ impl AppState {
                 GetOrganizationByIdService::with_persistence(persistence.clone()),
             ),
             get_all_organization_use_case: Arc::new(FindAllOrganizationsService::with_persistence(
+                persistence.clone(),
+            )),
+            link_client_organization: Arc::new(LinkClientOrganizationService::with_persistence(
                 persistence,
             )),
         }

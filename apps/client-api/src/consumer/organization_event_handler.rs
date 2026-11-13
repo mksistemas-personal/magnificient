@@ -17,7 +17,7 @@ impl OrganizationEventHandler {
         Self { state }
     }
 
-    async fn delete_clients_for_organization(
+    async fn handler_delete_client_organization(
         &self,
         event: OrganizationEvent,
         metadata: MessageMetadata,
@@ -44,7 +44,7 @@ impl MessageHandler<OrganizationEvent> for OrganizationEventHandler {
         use organization_contracts::v1::OrganizationEventType;
 
         if event.event_type == OrganizationEventType::DeleteOrganization {
-            self.delete_clients_for_organization(event, metadata)
+            self.handler_delete_client_organization(event, metadata)
                 .await?;
         }
         Ok(())

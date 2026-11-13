@@ -1904,6 +1904,7 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "client-contracts",
  "config",
  "database",
  "lapin",

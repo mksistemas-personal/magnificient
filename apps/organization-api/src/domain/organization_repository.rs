@@ -1,4 +1,5 @@
 use crate::domain::organization::Organization;
+use crate::domain::organization_link::OrganizationLink;
 use async_trait::async_trait;
 use shared::entities::BusinessError;
 use shared::types::page::PageRequest;
@@ -46,4 +47,11 @@ pub trait OrganizationRepository: Send + Sync {
         conn: &mut PgConnection,
         name: Option<&str>,
     ) -> Result<u64, BusinessError>;
+
+    /// Inserts a link between an organization and another entity.
+    async fn link_entity(
+        &self,
+        conn: &mut PgConnection,
+        link: &OrganizationLink,
+    ) -> Result<OrganizationLink, BusinessError>;
 }

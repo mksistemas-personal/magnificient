@@ -2,6 +2,8 @@ use async_trait::async_trait;
 use lapin::{message::Delivery, types::AMQPValue};
 use rabbit_warren::{Consumer, ProcessingError, RmqClient};
 use serde::de::DeserializeOwned;
+use shared::entities::BusinessError;
+use shared::errors::api_error::ApiError;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -13,6 +15,18 @@ pub struct MessageMetadata {
     pub message_id: Option<String>,
     pub source: Option<String>,
     pub tenant: Option<String>,
+}
+
+impl MessageMetadata {
+    pub fn require_tenant(&self) -> Result<&str, MessageHandlerError> {
+        self.tenant
+            .as_deref()
+            .map(str::trim)
+            .filter(|tenant| !tenant.is_empty())
+            .ok_or_else(|| {
+                MessageHandlerError::permanent("Message is missing valid tenant metadata")
+            })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,6 +53,24 @@ impl MessageHandlerError {
         Self {
             message: message.into(),
             strategy: FailureStrategy::Discard,
+        }
+    }
+}
+
+impl From<ApiError> for MessageHandlerError {
+    fn from(error: ApiError) -> Self {
+        match error {
+            ApiError::Internal(_) => Self::retryable(error.to_string()),
+            _ => Self::permanent(error.to_string()),
+        }
+    }
+}
+
+impl From<BusinessError> for MessageHandlerError {
+    fn from(error: BusinessError) -> Self {
+        match error {
+            BusinessError::Internal(_) => Self::retryable(error.to_string()),
+            _ => Self::permanent(error.to_string()),
         }
     }
 }
@@ -233,3 +265,62 @@ impl fmt::Display for MessageConsumerRegistryError {
 }
 
 impl std::error::Error for MessageConsumerRegistryError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use shared::entities::BusinessError;
+    use shared::errors::api_error::ApiError;
+
+    #[test]
+    fn test_message_metadata_require_tenant() {
+        let metadata = MessageMetadata {
+            event_type: "client.created".to_string(),
+            version: 1,
+            message_id: None,
+            source: None,
+            tenant: Some("  tenant-a  ".to_string()),
+        };
+        assert_eq!(metadata.require_tenant().unwrap(), "tenant-a");
+
+        let empty_metadata = MessageMetadata {
+            event_type: "client.created".to_string(),
+            version: 1,
+            message_id: None,
+            source: None,
+            tenant: Some("   ".to_string()),
+        };
+        assert!(empty_metadata.require_tenant().is_err());
+
+        let none_metadata = MessageMetadata {
+            event_type: "client.created".to_string(),
+            version: 1,
+            message_id: None,
+            source: None,
+            tenant: None,
+        };
+        assert!(none_metadata.require_tenant().is_err());
+    }
+
+    #[test]
+    fn test_from_api_error() {
+        let internal = ApiError::Internal("db failed".to_string());
+        let handler_error: MessageHandlerError = internal.into();
+        assert_eq!(handler_error.strategy, FailureStrategy::Retry);
+
+        let not_found = ApiError::NotFound("item".to_string());
+        let handler_error: MessageHandlerError = not_found.into();
+        assert_eq!(handler_error.strategy, FailureStrategy::Discard);
+    }
+
+    #[test]
+    fn test_from_business_error() {
+        let internal = BusinessError::Internal("timeout".to_string());
+        let handler_error: MessageHandlerError = internal.into();
+        assert_eq!(handler_error.strategy, FailureStrategy::Retry);
+
+        let not_found = BusinessError::NotFound("entity".to_string());
+        let handler_error: MessageHandlerError = not_found.into();
+        assert_eq!(handler_error.strategy, FailureStrategy::Discard);
+    }
+}

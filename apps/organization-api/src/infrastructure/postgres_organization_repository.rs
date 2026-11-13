@@ -1,3 +1,4 @@
+use crate::domain::OrganizationEntityType;
 use crate::domain::organization::{Organization, OrganizationId};
 use crate::domain::organization_link::OrganizationLink;
 use crate::domain::organization_repository::OrganizationRepository;
@@ -366,6 +367,32 @@ impl PostgresOrganizationRepository {
 
         Ok(link.clone())
     }
+
+    async fn execute_unlink_entity(
+        conn: &mut PgConnection,
+        entity_id: TSID,
+        entity_type: OrganizationEntityType,
+    ) -> Result<(), BusinessError> {
+        let entity_id_raw = entity_id.number() as i64;
+        let entity_type_str = entity_type.as_str();
+
+        let query = r#"
+            DELETE FROM organization_links
+            WHERE entity_id = $1 AND entity_type = $2::organization_entity_type
+        "#;
+
+        sqlx::query(query)
+            .bind(entity_id_raw)
+            .bind(entity_type_str)
+            .execute(&mut *conn)
+            .await
+            .map_err(|err| {
+                error!("Failed to unlink entity from organization in the database: {:?}", err);
+                BusinessError::internal(format!("Failed to delete organization link: {err}"))
+            })?;
+
+        Ok(())
+    }
 }
 
 impl From<PgPool> for PostgresOrganizationRepository {
@@ -436,6 +463,15 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         link: &OrganizationLink,
     ) -> Result<OrganizationLink, BusinessError> {
         Self::execute_link_entity(conn, link).await
+    }
+
+    async fn unlink_entity(
+        &self,
+        conn: &mut PgConnection,
+        entity_id: TSID,
+        entity_type: OrganizationEntityType,
+    ) -> Result<(), BusinessError> {
+        Self::execute_unlink_entity(conn, entity_id, entity_type).await
     }
 }
 

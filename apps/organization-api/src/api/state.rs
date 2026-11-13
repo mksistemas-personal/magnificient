@@ -2,8 +2,8 @@ use crate::application::{
     AddOrganizationRequest, AddOrganizationService, DeleteOrganizationRequest,
     DeleteOrganizationService, FindAllOrganizationsRequest, FindAllOrganizationsService,
     FindOrganizationByIdRequest, FromPersistence, GetOrganizationByIdService,
-    LinkClientOrganizationService, OrganizationPersistence, UpdateOrganizationRequest,
-    UpdateOrganizationService,
+    LinkClientOrganizationService, OrganizationPersistence, UnlinkClientOrganizationService,
+    UpdateOrganizationRequest, UpdateOrganizationService,
 };
 use crate::config::organization_config::OrganizationAppConfig;
 use crate::domain::organization::Organization;
@@ -38,6 +38,7 @@ pub struct AppState {
     pub get_all_organization_use_case:
         Arc<dyn AsyncGetAllUseCase<FindAllOrganizationsRequest, Page<Organization>>>,
     pub link_client_organization: Arc<LinkClientOrganizationService>,
+    pub unlink_client_organization: Arc<UnlinkClientOrganizationService>,
 }
 
 impl AppState {
@@ -99,13 +100,12 @@ impl AppState {
         db: DatabaseConnection,
         repository: impl OrganizationRepository + 'static,
     ) -> Self {
-        let pool = db.pool().clone();
         Self::from_persistence(
             config,
             db,
             String::new(),
             None,
-            OrganizationPersistence::new(repository, pool),
+            OrganizationPersistence::new_without_pool(repository),
         )
     }
 
@@ -115,8 +115,7 @@ impl AppState {
         repository: impl OrganizationRepository + 'static,
         address_repository: impl AddressRepository + 'static,
     ) -> Self {
-        let pool = db.pool().clone();
-        let persistence = OrganizationPersistence::new(repository, pool)
+        let persistence = OrganizationPersistence::new_without_pool(repository)
             .with_address_repository(address_repository);
         Self::from_persistence(config, db, String::new(), None, persistence)
     }
@@ -150,8 +149,11 @@ impl AppState {
                 persistence.clone(),
             )),
             link_client_organization: Arc::new(LinkClientOrganizationService::with_persistence(
-                persistence,
+                persistence.clone(),
             )),
+            unlink_client_organization: Arc::new(
+                UnlinkClientOrganizationService::with_persistence(persistence),
+            ),
         }
     }
 

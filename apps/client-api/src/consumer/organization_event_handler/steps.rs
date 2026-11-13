@@ -11,7 +11,6 @@ use async_trait::async_trait;
 use messaging::MessageHandlerError;
 use organization_contracts::v1::OrganizationEventType;
 use shared::entities::use_case::context::Context;
-use tracing::error;
 
 pub trait ValidateEvent {
     fn validate_event(
@@ -28,14 +27,7 @@ impl ValidateEvent for Context<Initial, InitialContextData> {
                 "Expected a DeleteOrganization event",
             ));
         }
-        let tenant = self
-            .data
-            .metadata
-            .tenant
-            .filter(|tenant| !tenant.trim().is_empty())
-            .ok_or_else(|| {
-                MessageHandlerError::permanent("OrganizationEvent is missing tenant metadata")
-            })?;
+        let tenant = self.data.metadata.require_tenant()?.to_owned();
 
         Ok(Context::new(EventValidatedContextData {
             event_id: self.data.event.id,
@@ -58,9 +50,7 @@ impl ResolveTenant for Context<EventValidated, EventValidatedContextData> {
         self,
         state: &AppState,
     ) -> Result<Context<TenantResolved, TenantResolvedContextData>, MessageHandlerError> {
-        let tenant_state = tenant_state(state, &self.data.tenant)
-            .await
-            .map_err(map_tenant_error)?;
+        let tenant_state = tenant_state(state, &self.data.tenant).await?;
         Ok(Context::new(TenantResolvedContextData {
             event_id: self.data.event_id,
             tenant_state,
@@ -111,29 +101,7 @@ impl DeleteOrganizationClients for Context<OrganizationIdParsed, OrganizationIdP
                 organization_id: self.data.organization_id,
                 updated_by: "organization-api".to_owned(),
             })
-            .await
-            .map_err(map_delete_error)
-    }
-}
-
-fn map_tenant_error(error: shared::errors::api_error::ApiError) -> MessageHandlerError {
-    match error {
-        shared::errors::api_error::ApiError::Internal(_) => {
-            MessageHandlerError::retryable(error.to_string())
-        }
-        _ => MessageHandlerError::permanent(error.to_string()),
-    }
-}
-
-fn map_delete_error(error: shared::entities::BusinessError) -> MessageHandlerError {
-    match error {
-        shared::entities::BusinessError::NotFound(_) => {
-            MessageHandlerError::permanent(error.to_string())
-        }
-        shared::entities::BusinessError::Internal(_) => {
-            error!(error = %error, "Client deletion failed while processing OrganizationEvent");
-            MessageHandlerError::retryable(error.to_string())
-        }
-        _ => MessageHandlerError::permanent(error.to_string()),
+            .await?;
+        Ok(())
     }
 }

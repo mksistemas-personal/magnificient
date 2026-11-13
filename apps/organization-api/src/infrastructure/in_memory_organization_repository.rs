@@ -1,3 +1,4 @@
+use crate::domain::OrganizationEntityType;
 use crate::domain::organization::{Organization, OrganizationId};
 use crate::domain::organization_link::OrganizationLink;
 use crate::domain::organization_repository::OrganizationRepository;
@@ -39,6 +40,10 @@ impl InMemoryOrganizationRepository {
 
     pub fn insert_for_test(&self, organization: Organization) {
         self.items.write().unwrap().insert(organization.id(), organization);
+    }
+
+    pub fn insert_link_for_test(&self, link: OrganizationLink) {
+        self.links.write().unwrap().push(link);
     }
 
     pub fn links(&self) -> Vec<OrganizationLink> {
@@ -169,6 +174,17 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
         }
         links.push(link.clone());
         Ok(link.clone())
+    }
+
+    async fn unlink_entity(
+        &self,
+        _conn: &mut PgConnection,
+        entity_id: TSID,
+        entity_type: OrganizationEntityType,
+    ) -> Result<(), BusinessError> {
+        let mut links = self.links.write().unwrap();
+        links.retain(|l| !(l.entity_id() == entity_id && l.entity_type() == entity_type));
+        Ok(())
     }
 }
 
@@ -412,5 +428,66 @@ mod tests {
         let res = with_dummy_conn!(|conn| repo.link_entity(conn, &duplicate)).await;
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), OrganizationBusinessErrors::already_exists());
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_unlink_entity_success() {
+        use crate::domain::{OrganizationEntityType, OrganizationLink};
+
+        let repo = InMemoryOrganizationRepository::new();
+        let org_id = OrganizationId::new(TSID::from(100u64));
+        let doc = Document::new("00.000.000/0001-91", DocumentType::Cnpj);
+        let org = Organization::new(org_id, "Empresa Teste", doc)
+            .with_audit(AuditFields::created("admin"));
+
+        with_dummy_conn!(|conn| repo.save(conn, &org))
+            .await
+            .unwrap();
+
+        let link1 = OrganizationLink::new(
+            org_id,
+            TSID::from(200u64),
+            OrganizationEntityType::Client,
+            "system",
+        );
+        let link2 = OrganizationLink::new(
+            org_id,
+            TSID::from(300u64),
+            OrganizationEntityType::Client,
+            "system",
+        );
+
+        with_dummy_conn!(|conn| repo.link_entity(conn, &link1))
+            .await
+            .unwrap();
+        with_dummy_conn!(|conn| repo.link_entity(conn, &link2))
+            .await
+            .unwrap();
+
+        assert_eq!(repo.links().len(), 2);
+
+        let res = with_dummy_conn!(|conn| {
+            repo.unlink_entity(conn, TSID::from(200u64), OrganizationEntityType::Client)
+        })
+        .await;
+
+        assert!(res.is_ok());
+        let remaining = repo.links();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].entity_id(), TSID::from(300u64));
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_unlink_entity_not_found_is_noop() {
+        use crate::domain::OrganizationEntityType;
+
+        let repo = InMemoryOrganizationRepository::new();
+        let res = with_dummy_conn!(|conn| {
+            repo.unlink_entity(conn, TSID::from(999u64), OrganizationEntityType::Client)
+        })
+        .await;
+
+        assert!(res.is_ok());
+        assert_eq!(repo.links().len(), 0);
     }
 }

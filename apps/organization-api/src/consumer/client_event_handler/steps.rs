@@ -4,14 +4,13 @@ use super::data::{
 };
 use super::states::{ClientIdParsed, EventValidated, Initial, TenantResolved};
 use crate::api::AppState;
-use crate::application::LinkClientOrganizationRequest;
+use crate::application::{LinkClientOrganizationRequest, UnlinkClientOrganizationRequest};
 use crate::domain::{ClientId, OrganizationId};
 use crate::infrastructure::tenant_state;
 use async_trait::async_trait;
 use client_contracts::v1::ClientEventType;
 use messaging::MessageHandlerError;
 use shared::entities::use_case::context::Context;
-use tracing::error;
 
 pub trait ValidateEvent {
     fn validate_event(
@@ -28,14 +27,13 @@ impl ValidateEvent for Context<Initial, InitialContextData> {
                 "Expected an AddClient event",
             ));
         }
-        let tenant = self
-            .data
-            .metadata
-            .tenant
-            .filter(|tenant| !tenant.trim().is_empty())
-            .ok_or_else(|| {
-                MessageHandlerError::permanent("ClientEvent is missing tenant metadata")
-            })?;
+        let tenant = self.data.metadata.require_tenant()?.to_owned();
+
+        if self.data.event.id.trim().is_empty() {
+            return Err(MessageHandlerError::permanent(
+                "ClientEvent is missing id",
+            ));
+        }
 
         let organization_id = self
             .data
@@ -47,8 +45,39 @@ impl ValidateEvent for Context<Initial, InitialContextData> {
             })?;
 
         Ok(Context::new(EventValidatedContextData {
-            event_id: self.data.event.id,
-            organization_id,
+            client_id: self.data.event.id,
+            organization_id: Some(organization_id),
+            tenant,
+        }))
+    }
+}
+
+pub trait ValidateDeleteEvent {
+    fn validate_delete_event(
+        self,
+    ) -> Result<Context<EventValidated, EventValidatedContextData>, MessageHandlerError>;
+}
+
+impl ValidateDeleteEvent for Context<Initial, InitialContextData> {
+    fn validate_delete_event(
+        self,
+    ) -> Result<Context<EventValidated, EventValidatedContextData>, MessageHandlerError> {
+        if self.data.event.event_type != ClientEventType::DeleteClient {
+            return Err(MessageHandlerError::permanent(
+                "Expected a DeleteClient event",
+            ));
+        }
+        let tenant = self.data.metadata.require_tenant()?.to_owned();
+
+        if self.data.event.id.trim().is_empty() {
+            return Err(MessageHandlerError::permanent(
+                "ClientEvent is missing id",
+            ));
+        }
+
+        Ok(Context::new(EventValidatedContextData {
+            client_id: self.data.event.id,
+            organization_id: None,
             tenant,
         }))
     }
@@ -68,11 +97,9 @@ impl ResolveTenant for Context<EventValidated, EventValidatedContextData> {
         self,
         state: &AppState,
     ) -> Result<Context<TenantResolved, TenantResolvedContextData>, MessageHandlerError> {
-        let tenant_state = tenant_state(state, &self.data.tenant)
-            .await
-            .map_err(map_tenant_error)?;
+        let tenant_state = tenant_state(state, &self.data.tenant).await?;
         Ok(Context::new(TenantResolvedContextData {
-            event_id: self.data.event_id,
+            client_id: self.data.client_id,
             organization_id: self.data.organization_id,
             tenant_state,
         }))
@@ -89,25 +116,24 @@ impl ParseClientAndOrganizationId for Context<TenantResolved, TenantResolvedCont
     fn parse_client_and_organization_id(
         self,
     ) -> Result<Context<ClientIdParsed, ClientIdParsedContextData>, MessageHandlerError> {
-        let client_id = self.data.event_id.parse::<ClientId>().map_err(|error| {
+        let client_id = self.data.client_id.parse::<ClientId>().map_err(|error| {
             MessageHandlerError::permanent(format!(
                 "Invalid client id '{}': {error}",
-                self.data.event_id
+                self.data.client_id
             ))
         })?;
-        let organization_id = self
-            .data
-            .organization_id
-            .parse::<OrganizationId>()
-            .map_err(|error| {
+        let organization_id = match self.data.organization_id {
+            Some(ref org_id) => Some(org_id.parse::<OrganizationId>().map_err(|error| {
                 MessageHandlerError::permanent(format!(
                     "Invalid organization id '{}': {error}",
-                    self.data.organization_id
+                    org_id
                 ))
-            })?;
+            })?),
+            None => None,
+        };
         Ok(Context::new(ClientIdParsedContextData {
-            organization_id,
             client_id,
+            organization_id,
             tenant_state: self.data.tenant_state,
         }))
     }
@@ -121,41 +147,38 @@ pub trait AddClientToOrganization {
 #[async_trait]
 impl AddClientToOrganization for Context<ClientIdParsed, ClientIdParsedContextData> {
     async fn link_client_organization(self) -> Result<(), MessageHandlerError> {
+        let organization_id = self.data.organization_id.ok_or_else(|| {
+            MessageHandlerError::permanent("Missing organization_id for link_client_organization")
+        })?;
+
         self.data
             .tenant_state
             .link_client_organization
             .execute(LinkClientOrganizationRequest::new(
-                self.data.organization_id,
+                organization_id,
                 self.data.client_id,
                 "client-consumer",
             ))
-            .await
-            .map_err(map_link_error)?;
+            .await?;
         Ok(())
     }
 }
 
-fn map_tenant_error(error: shared::errors::api_error::ApiError) -> MessageHandlerError {
-    match error {
-        shared::errors::api_error::ApiError::Internal(_) => {
-            MessageHandlerError::retryable(error.to_string())
-        }
-        _ => MessageHandlerError::permanent(error.to_string()),
-    }
+#[async_trait]
+pub trait RemoveClientFromOrganization {
+    async fn unlink_client_organization(self) -> Result<(), MessageHandlerError>;
 }
 
-fn map_link_error(error: shared::entities::BusinessError) -> MessageHandlerError {
-    match error {
-        shared::entities::BusinessError::NotFound(_) => {
-            MessageHandlerError::permanent(error.to_string())
-        }
-        shared::entities::BusinessError::AlreadyExists(_) => {
-            MessageHandlerError::permanent(error.to_string())
-        }
-        shared::entities::BusinessError::Internal(_) => {
-            error!(error = %error, "Link client to organization failed while processing ClientEvent");
-            MessageHandlerError::retryable(error.to_string())
-        }
-        _ => MessageHandlerError::permanent(error.to_string()),
+#[async_trait]
+impl RemoveClientFromOrganization for Context<ClientIdParsed, ClientIdParsedContextData> {
+    async fn unlink_client_organization(self) -> Result<(), MessageHandlerError> {
+        self.data
+            .tenant_state
+            .unlink_client_organization
+            .execute(UnlinkClientOrganizationRequest::new(
+                self.data.client_id,
+            ))
+            .await?;
+        Ok(())
     }
 }

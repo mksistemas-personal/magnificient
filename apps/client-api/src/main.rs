@@ -1,6 +1,6 @@
-use cliente_api::api::{AppState, create_router};
+use cliente_api::adapters::api::{AppState, create_router};
 use cliente_api::config::ClientAppConfig;
-use cliente_api::consumer::OrganizationEventHandler;
+use cliente_api::adapters::consumer::OrganizationEventHandler;
 use cliente_api::infrastructure::RabbitmqSeed;
 use database::{
     DatabaseConnection, combine_migrators, migrator_with_table, provision_tenant_schema,

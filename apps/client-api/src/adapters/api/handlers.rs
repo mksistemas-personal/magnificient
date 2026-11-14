@@ -1,8 +1,8 @@
-use crate::api::client_dto::{
+use crate::adapters::api::client_dto::{
     ClientResponseDto, CreateClientDto, DeleteClientParams, FindClientsParams, UpdateClientDto,
     map_api_error, parse_id,
 };
-use crate::api::state::AppState;
+use crate::adapters::api::state::AppState;
 use crate::application::{
     CreateClientRequest, DeleteClientRequest, FindClientsRequest, GetClientByIdRequest,
 };

@@ -1,5 +1,5 @@
-use crate::api::handlers;
-use crate::api::state::AppState;
+use crate::adapters::api::handlers;
+use crate::adapters::api::state::AppState;
 use axum::{
     Router,
     routing::{get, post},

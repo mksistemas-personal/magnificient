@@ -31,7 +31,7 @@ impl ClientRepository for InMemoryClientRepository {
         self.items
             .write()
             .expect("client repository lock poisoned")
-            .insert(client.id.value(), client.clone());
+            .insert(client.id().value(), client.clone());
         Ok(client.clone())
     }
 
@@ -77,13 +77,13 @@ impl ClientRepository for InMemoryClientRepository {
             .values()
             .filter(|client| {
                 name.as_ref()
-                    .is_none_or(|name| client.name.to_lowercase().contains(name))
+                    .is_none_or(|name| client.name().to_lowercase().contains(name))
                     && organization_id
-                        .is_none_or(|id| client.organization_id.number() == id.number())
+                        .is_none_or(|id| client.organization_id().number() == id.number())
             })
             .cloned()
             .collect();
-        clients.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
+        clients.sort_by(|left, right| left.name().cmp(right.name()).then(left.id().cmp(&right.id())));
 
         let total = clients.len() as u64;
         let start = page_request.offset() as usize;

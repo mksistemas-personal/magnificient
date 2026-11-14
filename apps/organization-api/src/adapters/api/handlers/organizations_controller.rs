@@ -159,24 +159,22 @@ async fn publish_message(state: AppState, event: &OrganizationEvent) -> Result<(
 
 fn organization_added_event(organization: &Organization) -> OrganizationEvent {
     OrganizationEvent::add(
-        organization.id.to_string(),
-        organization.name.to_string(),
-        organization_document_event(&organization.document),
+        organization.id().to_string(),
+        organization.name().to_string(),
+        organization_document_event(organization.document()),
         organization
-            .address
-            .as_ref()
+            .address()
             .map(organization_address_event),
     )
 }
 
 fn organization_updated_event(organization: &Organization) -> OrganizationEvent {
     OrganizationEvent::update(
-        organization.id.to_string(),
-        organization.name.clone(),
-        organization_document_event(&organization.document),
+        organization.id().to_string(),
+        organization.name().to_string(),
+        organization_document_event(organization.document()),
         organization
-            .address
-            .as_ref()
+            .address()
             .map(organization_address_event),
     )
 }

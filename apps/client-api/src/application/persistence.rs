@@ -49,9 +49,10 @@ impl ClientPersistence {
             .run(move |conn| {
                 Box::pin(async move {
                     let mut client = client;
-                    if let Some(address) = client.second_address.clone() {
-                        client.second_address =
-                            Some(address_repository.save_in_tx(conn, &address).await?);
+                    if let Some(address) = client.second_address().cloned() {
+                        client.set_second_address(
+                            Some(address_repository.save_in_tx(conn, &address).await?),
+                        );
                     }
                     repository.save(conn, &client).await
                 })

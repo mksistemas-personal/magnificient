@@ -80,12 +80,12 @@ pub struct ClientResponseDto {
 impl From<Client> for ClientResponseDto {
     fn from(client: Client) -> Self {
         Self {
-            id: client.id.to_string(),
-            organization_id: client.organization_id.to_string(),
-            name: client.name,
-            nickname: client.nickname,
-            second_address: client.second_address,
-            audit: client.audit,
+            id: client.id().to_string(),
+            organization_id: client.organization_id().to_string(),
+            name: client.name().to_string(),
+            nickname: client.nickname().map(String::from),
+            second_address: client.second_address().cloned(),
+            audit: client.audit().cloned(),
         }
     }
 }

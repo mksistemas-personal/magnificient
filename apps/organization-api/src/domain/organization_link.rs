@@ -40,13 +40,13 @@ impl FromStr for OrganizationEntityType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrganizationLink {
-    pub id: TSID,
-    pub organization_id: OrganizationId,
-    pub entity_id: TSID,
-    pub entity_type: OrganizationEntityType,
-    pub linked_at: DateTime<Utc>,
-    pub created_at: DateTime<Utc>,
-    pub created_by: String,
+    id: TSID,
+    organization_id: OrganizationId,
+    entity_id: TSID,
+    entity_type: OrganizationEntityType,
+    linked_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
+    created_by: String,
 }
 
 impl OrganizationLink {

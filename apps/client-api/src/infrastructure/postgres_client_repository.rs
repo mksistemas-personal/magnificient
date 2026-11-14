@@ -90,7 +90,7 @@ impl TryFrom<ClientRow> for Client {
                 created_by: required(row.address_created_by, "created_by")?,
                 updated_by: required(row.address_updated_by, "updated_by")?,
             });
-            client.second_address = Some(address);
+            client.set_second_address(Some(address));
         }
 
         Ok(client)
@@ -123,12 +123,11 @@ impl ClientRepository for PostgresClientRepository {
     ) -> Result<Client, BusinessError> {
         let now = Utc::now();
         let audit = client
-            .audit
-            .clone()
+            .audit()
+            .cloned()
             .unwrap_or_else(|| AuditFields::created("system"));
         let address_id = client
-            .second_address
-            .as_ref()
+            .second_address()
             .and_then(Address::id)
             .map(|id| id.number() as i64);
 
@@ -148,10 +147,10 @@ impl ClientRepository for PostgresClientRepository {
                     updated_by = EXCLUDED.updated_by
             "#,
         )
-        .bind(client.id.number() as i64)
-        .bind(client.organization_id.number() as i64)
-        .bind(&client.name)
-        .bind(&client.nickname)
+        .bind(client.id().number() as i64)
+        .bind(client.organization_id().number() as i64)
+        .bind(client.name())
+        .bind(client.nickname())
         .bind(address_id)
         .bind(audit.created_at)
         .bind(now.max(audit.updated_at))
@@ -165,12 +164,11 @@ impl ClientRepository for PostgresClientRepository {
                     return ClientBusinessErrors::organization_not_found();
                 }
             }
-            error!("Failed to persist client {}: {err:?}", client.id);
+            error!("Failed to persist client {}: {err:?}", client.id());
             ClientBusinessErrors::persist_failed(err)
         })?;
 
-        let mut saved = client.clone();
-        saved.audit = Some(AuditFields {
+        let saved = client.clone().with_audit(AuditFields {
             created_at: audit.created_at,
             updated_at: now.max(audit.updated_at),
             created_by: audit.created_by,

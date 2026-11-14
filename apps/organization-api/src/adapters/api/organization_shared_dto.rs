@@ -60,7 +60,7 @@ impl From<Organization> for OrganizationResponseDto {
                 country: org.document().country().map(|c| c.code().to_string()),
             },
             address: org.address().cloned(),
-            audit: org.audit.as_ref().map(|a| AuditResponseDto {
+            audit: org.audit().map(|a| AuditResponseDto {
                 created_by: a.created_by().to_string(),
                 created_at: a.created_at().to_rfc3339(),
                 updated_by: a.updated_by().to_string(),

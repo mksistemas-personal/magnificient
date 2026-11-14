@@ -47,14 +47,14 @@ mod tests {
             .execute(create_request())
             .await
             .unwrap();
-        assert_eq!(created.nickname.as_deref(), Some("Mo"));
-        assert!(created.second_address.as_ref().unwrap().id().is_some());
-        assert!(created.audit.is_some());
+        assert_eq!(created.nickname(), Some("Mo"));
+        assert!(created.second_address().unwrap().id().is_some());
+        assert!(created.audit().is_some());
 
         let updated = UpdateClientService::new(persistence.clone())
             .execute(UpdateClientRequest {
-                id: created.id,
-                organization_id: created.organization_id,
+                id: created.id(),
+                organization_id: created.organization_id(),
                 name: "Morgan Lee Updated".to_owned(),
                 nickname: None,
                 second_address: None,
@@ -62,13 +62,13 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(updated.name, "Morgan Lee Updated");
-        assert_eq!(updated.audit.as_ref().unwrap().updated_by(), "editor");
+        assert_eq!(updated.name(), "Morgan Lee Updated");
+        assert_eq!(updated.audit().unwrap().updated_by(), "editor");
 
         let page = FindClientsService::new(persistence.clone())
             .execute(FindClientsRequest {
                 name: Some("Morgan".to_owned()),
-                organization_id: Some(created.organization_id),
+                organization_id: Some(created.organization_id()),
                 page_request: PageRequest::default(),
             })
             .await
@@ -77,13 +77,13 @@ mod tests {
 
         DeleteClientService::new(persistence.clone())
             .execute(DeleteClientRequest {
-                id: created.id,
+                id: created.id(),
                 updated_by: "deleter".to_owned(),
             })
             .await
             .unwrap();
         let missing = GetClientByIdService::new(persistence)
-            .execute(GetClientByIdRequest { id: created.id })
+            .execute(GetClientByIdRequest { id: created.id() })
             .await;
         assert!(matches!(missing, Err(BusinessError::NotFound(_))));
     }

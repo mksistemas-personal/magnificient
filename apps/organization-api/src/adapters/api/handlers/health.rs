@@ -1,4 +1,4 @@
-use crate::api::state::AppState;
+use crate::adapters::api::state::AppState;
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use serde_json::json;
 

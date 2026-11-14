@@ -34,7 +34,7 @@ impl DeleteOrganizationClientsService {
 
             for client in page.content {
                 self.persistence
-                    .delete(client.id.value(), request.updated_by.clone())
+                    .delete(client.id().value(), request.updated_by.clone())
                     .await?;
             }
         }

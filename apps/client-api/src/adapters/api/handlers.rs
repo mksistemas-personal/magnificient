@@ -1,8 +1,8 @@
-use crate::api::client_dto::{
+use crate::adapters::api::client_dto::{
     ClientResponseDto, CreateClientDto, DeleteClientParams, FindClientsParams, UpdateClientDto,
     map_api_error, parse_id,
 };
-use crate::api::state::AppState;
+use crate::adapters::api::state::AppState;
 use crate::application::{
     CreateClientRequest, DeleteClientRequest, FindClientsRequest, GetClientByIdRequest,
 };
@@ -96,21 +96,21 @@ async fn publish_message(state: AppState, event: &ClientEvent) -> Result<(), Api
 
 fn client_added_event(client: &crate::domain::Client) -> ClientEvent {
     ClientEvent::add(
-        client.id.to_string(),
-        client.organization_id.to_string(),
-        client.name.clone(),
-        client.nickname.clone(),
-        client.second_address.as_ref().map(client_address_event),
+        client.id().to_string(),
+        client.organization_id().to_string(),
+        client.name().to_string(),
+        client.nickname().map(String::from),
+        client.second_address().map(client_address_event),
     )
 }
 
 fn client_updated_event(client: &crate::domain::Client) -> ClientEvent {
     ClientEvent::update(
-        client.id.to_string(),
-        client.organization_id.to_string(),
-        client.name.clone(),
-        client.nickname.clone(),
-        client.second_address.as_ref().map(client_address_event),
+        client.id().to_string(),
+        client.organization_id().to_string(),
+        client.name().to_string(),
+        client.nickname().map(String::from),
+        client.second_address().map(client_address_event),
     )
 }
 

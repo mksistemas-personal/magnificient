@@ -3,9 +3,9 @@ use database::{
     DatabaseConnection, combine_migrators, migrator_with_table, provision_tenant_schema,
 };
 use messaging::{MessageConsumerRegistry, RabbitMqPublisher, create_rabbitmq_client};
-use organizacao_api::api::{AppState, create_router};
+use organizacao_api::adapters::api::{AppState, create_router};
 use organizacao_api::config::organization_config::OrganizationAppConfig;
-use organizacao_api::consumer::ClientEventHandler;
+use organizacao_api::adapters::consumer::ClientEventHandler;
 use organizacao_api::infrastructure::RabbitmqSeed;
 use rabbit_warren::RmqClient;
 use std::error::Error;

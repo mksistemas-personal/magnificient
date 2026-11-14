@@ -1,7 +1,7 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use messaging::RabbitMqConfig;
-use organizacao_api::api::{AppState, create_router};
+use organizacao_api::adapters::api::{AppState, create_router};
 use organizacao_api::config::organization_config::{
     DatabaseConfig, LoggingConfig, OrganizationAppConfig, ServerConfig,
 };

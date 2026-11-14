@@ -1,4 +1,4 @@
-use crate::api::AppState;
+use crate::adapters::api::AppState;
 use shared::errors::api_error::ApiError;
 
 /// Resolves an active tenant and creates an `AppState` scoped to its schema.

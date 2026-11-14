@@ -12,12 +12,12 @@ pub type OrganizationId = EntityId<OrganizationMarker>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Client {
-    pub id: ClientId,
-    pub organization_id: OrganizationId,
-    pub name: String,
-    pub nickname: Option<String>,
-    pub second_address: Option<Address>,
-    pub audit: Option<AuditFields>,
+    id: ClientId,
+    organization_id: OrganizationId,
+    name: String,
+    nickname: Option<String>,
+    second_address: Option<Address>,
+    audit: Option<AuditFields>,
 }
 
 impl Client {
@@ -44,6 +44,11 @@ impl Client {
         self
     }
 
+    pub fn with_second_address(mut self, second_address: Option<Address>) -> Self {
+        self.second_address = second_address;
+        self
+    }
+
     pub fn id(&self) -> ClientId {
         self.id
     }
@@ -54,6 +59,22 @@ impl Client {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn nickname(&self) -> Option<&str> {
+        self.nickname.as_deref()
+    }
+
+    pub fn second_address(&self) -> Option<&Address> {
+        self.second_address.as_ref()
+    }
+
+    pub fn set_second_address(&mut self, second_address: Option<Address>) {
+        self.second_address = second_address;
+    }
+
+    pub fn audit(&self) -> Option<&AuditFields> {
+        self.audit.as_ref()
     }
 
     pub fn update(

@@ -2,8 +2,8 @@ mod data;
 mod states;
 mod steps;
 
-use crate::api::AppState;
-use crate::consumer::organization_event_handler::states::Initial;
+use crate::adapters::api::AppState;
+use crate::adapters::consumer::organization_event_handler::states::Initial;
 use messaging::{MessageHandler, MessageHandlerError, MessageMetadata};
 use organization_contracts::v1::OrganizationEvent;
 use shared::entities::use_case::context::Context;

@@ -1,9 +1,9 @@
-use crate::api::add_organization_dto::CreateOrganizationDto;
-use crate::api::delete_organization_dto::DeleteOrganizationParams;
-use crate::api::find_all_organization_dto::FindAllOrganizationsParams;
-use crate::api::organization_shared_dto::OrganizationResponseDto;
-use crate::api::state::AppState;
-use crate::api::update_organization_dto::UpdateOrganizationDto;
+use crate::adapters::api::add_organization_dto::CreateOrganizationDto;
+use crate::adapters::api::delete_organization_dto::DeleteOrganizationParams;
+use crate::adapters::api::find_all_organization_dto::FindAllOrganizationsParams;
+use crate::adapters::api::organization_shared_dto::OrganizationResponseDto;
+use crate::adapters::api::state::AppState;
+use crate::adapters::api::update_organization_dto::UpdateOrganizationDto;
 use crate::application::{
     AddOrganizationRequest, DeleteOrganizationRequest, FindAllOrganizationsRequest,
     FindOrganizationByIdRequest, UpdateOrganizationRequest,
@@ -159,24 +159,22 @@ async fn publish_message(state: AppState, event: &OrganizationEvent) -> Result<(
 
 fn organization_added_event(organization: &Organization) -> OrganizationEvent {
     OrganizationEvent::add(
-        organization.id.to_string(),
-        organization.name.to_string(),
-        organization_document_event(&organization.document),
+        organization.id().to_string(),
+        organization.name().to_string(),
+        organization_document_event(organization.document()),
         organization
-            .address
-            .as_ref()
+            .address()
             .map(organization_address_event),
     )
 }
 
 fn organization_updated_event(organization: &Organization) -> OrganizationEvent {
     OrganizationEvent::update(
-        organization.id.to_string(),
-        organization.name.clone(),
-        organization_document_event(&organization.document),
+        organization.id().to_string(),
+        organization.name().to_string(),
+        organization_document_event(organization.document()),
         organization
-            .address
-            .as_ref()
+            .address()
             .map(organization_address_event),
     )
 }

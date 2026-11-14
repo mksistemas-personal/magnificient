@@ -141,7 +141,7 @@ impl PostgresOrganizationRepository {
         conn: &mut PgConnection,
         organization: &Organization,
     ) -> Result<Organization, BusinessError> {
-        let (created_at, updated_at, created_by, updated_by) = match &organization.audit {
+        let (created_at, updated_at, created_by, updated_by) = match organization.audit() {
             Some(audit) => (
                 audit.created_at(),
                 audit.updated_at(),

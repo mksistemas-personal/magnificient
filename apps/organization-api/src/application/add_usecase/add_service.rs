@@ -80,8 +80,8 @@ mod tests {
         assert_eq!(org.name(), "Empresa Teste");
         assert_eq!(org.document().value(), "00.000.000/0001-91");
         assert_eq!(org.address(), None);
-        assert!(org.audit.is_some());
-        assert_eq!(org.audit.as_ref().unwrap().created_by(), "admin");
+        assert!(org.audit().is_some());
+        assert_eq!(org.audit().unwrap().created_by(), "admin");
     }
 
     #[tokio::test]

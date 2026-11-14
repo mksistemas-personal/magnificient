@@ -3,7 +3,7 @@ use super::data::{
     TenantResolvedContextData,
 };
 use super::states::{EventValidated, Initial, OrganizationIdParsed, TenantResolved};
-use crate::api::AppState;
+use crate::adapters::api::AppState;
 use crate::application::DeleteOrganizationClientsRequest;
 use crate::domain::OrganizationId;
 use crate::infrastructure::tenant_state;

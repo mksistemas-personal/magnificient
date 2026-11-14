@@ -1,4 +1,4 @@
-use crate::api::AppState;
+use crate::adapters::api::AppState;
 use crate::domain::OrganizationId;
 use messaging::MessageMetadata;
 use organization_contracts::v1::OrganizationEvent;

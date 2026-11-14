@@ -8,11 +8,11 @@ pub type OrganizationId = EntityId<OrganizationMarker>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Organization {
-    pub id: OrganizationId,
-    pub name: String,
-    pub document: Document,
-    pub address: Option<Address>,
-    pub audit: Option<AuditFields>,
+    id: OrganizationId,
+    name: String,
+    document: Document,
+    address: Option<Address>,
+    audit: Option<AuditFields>,
 }
 
 impl Organization {
@@ -66,6 +66,10 @@ impl Organization {
 
     pub fn address(&self) -> Option<&Address> {
         self.address.as_ref()
+    }
+
+    pub fn audit(&self) -> Option<&AuditFields> {
+        self.audit.as_ref()
     }
 }
 
@@ -145,7 +149,7 @@ mod tests {
         org.update("Novo Nome", "editor");
 
         assert_eq!(org.name(), "Novo Nome");
-        let audit = org.audit.as_ref().unwrap();
+        let audit = org.audit().unwrap();
         assert_eq!(audit.created_by(), "admin");
         assert_eq!(audit.updated_by(), "editor");
     }
@@ -159,7 +163,7 @@ mod tests {
         org.update("Novo Nome", "editor");
 
         assert_eq!(org.name(), "Novo Nome");
-        let audit = org.audit.as_ref().unwrap();
+        let audit = org.audit().unwrap();
         assert_eq!(audit.created_by(), "editor");
         assert_eq!(audit.updated_by(), "editor");
     }

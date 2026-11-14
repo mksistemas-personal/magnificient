@@ -101,7 +101,7 @@ mod tests {
 
         let updated = result.unwrap();
         assert_eq!(updated.name(), "Novo Nome");
-        let audit = updated.audit.as_ref().unwrap();
+        let audit = updated.audit().unwrap();
         assert_eq!(audit.created_by(), "admin");
         assert_eq!(audit.updated_by(), "editor");
     }

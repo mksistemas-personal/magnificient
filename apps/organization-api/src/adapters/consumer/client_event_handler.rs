@@ -2,8 +2,8 @@ pub mod data;
 pub mod states;
 pub mod steps;
 
-use crate::api::AppState;
-use crate::consumer::client_event_handler::states::Initial;
+use crate::adapters::api::AppState;
+use crate::adapters::consumer::client_event_handler::states::Initial;
 use async_trait::async_trait;
 use client_contracts::v1::{ClientEvent, ClientEventType};
 use messaging::{MessageHandler, MessageHandlerError, MessageMetadata};

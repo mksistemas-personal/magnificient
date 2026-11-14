@@ -86,15 +86,14 @@ impl ChangeClientContext for Context<Loaded, LoadedContextData> {
         let mut second_address = request.second_address;
         if let Some(address) = second_address.as_mut() {
             if address.id.is_none() {
-                address.id = self.data.client.second_address.as_ref().and_then(|a| a.id);
+                address.id = self.data.client.second_address().and_then(|a| a.id);
             }
             if let Some(audit) = address.audit.as_mut() {
                 audit.updated(request.updated_by.trim());
             } else if let Some(mut audit) = self
                 .data
                 .client
-                .second_address
-                .as_ref()
+                .second_address()
                 .and_then(|a| a.audit.clone())
             {
                 audit.updated(request.updated_by.trim());

@@ -1,5 +1,5 @@
-pub mod document_type;
-pub mod validator;
+mod document_type;
+mod validator;
 
 pub use document_type::{Country, DocumentType};
 
@@ -7,8 +7,8 @@ use crate::errors::DocumentError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Document {
-    pub value: String,
-    pub document_type: DocumentType,
+    value: String,
+    document_type: DocumentType,
 }
 
 impl Document {

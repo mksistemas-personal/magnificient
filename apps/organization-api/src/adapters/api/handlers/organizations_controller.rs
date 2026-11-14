@@ -181,8 +181,8 @@ fn organization_updated_event(organization: &Organization) -> OrganizationEvent 
 
 fn organization_document_event(document: &Document) -> OrganizationDocument {
     OrganizationDocument {
-        value: document.value.to_string(),
-        document_type: document.document_type.code().to_string(),
+        value: document.value().to_string(),
+        document_type: document.document_type().code().to_string(),
         country: document.country().map(|country| country.code().to_string()),
     }
 }

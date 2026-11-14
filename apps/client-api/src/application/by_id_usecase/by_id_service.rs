@@ -4,10 +4,7 @@ use crate::application::by_id_usecase::states::Initial;
 use crate::application::by_id_usecase::steps::{FindClientByIdContext, ValidateInitialContext};
 use crate::domain::Client;
 use async_trait::async_trait;
-use shared::entities::{
-    BusinessError,
-    use_case::{context::Context, use_case_traits::AsyncGetByIdUseCase},
-};
+use shared::entities::{AsyncGetByIdUseCase, BusinessError, Context};
 #[derive(Clone)]
 pub struct GetClientByIdService {
     persistence: ClientPersistence,

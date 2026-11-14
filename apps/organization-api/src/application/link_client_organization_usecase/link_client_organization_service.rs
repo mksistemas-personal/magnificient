@@ -9,9 +9,7 @@ use crate::application::link_client_organization_usecase::steps::{
 use crate::application::service_constructors::FromPersistence;
 use crate::domain::OrganizationLink;
 use async_trait::async_trait;
-use shared::entities::BusinessError;
-use shared::entities::use_case::context::Context;
-use shared::entities::use_case::use_case_traits::AsyncAddEntityUseCase;
+use shared::entities::{AsyncAddEntityUseCase, BusinessError, Context};
 
 #[derive(Clone)]
 pub struct LinkClientOrganizationService {

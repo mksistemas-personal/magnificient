@@ -10,7 +10,7 @@ use crate::infrastructure::tenant_state;
 use async_trait::async_trait;
 use client_contracts::v1::ClientEventType;
 use messaging::MessageHandlerError;
-use shared::entities::use_case::context::Context;
+use shared::entities::Context;
 
 pub trait ValidateEvent {
     fn validate_event(

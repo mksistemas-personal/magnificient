@@ -3,8 +3,7 @@ use crate::application::all_usecase::data::{InitialContextData, ValidatedContext
 use crate::application::all_usecase::states::{Initial, Validated};
 use crate::domain::Organization;
 use async_trait::async_trait;
-use shared::entities::BusinessError;
-use shared::entities::use_case::context::Context;
+use shared::entities::{BusinessError, Context};
 use shared::types::Page;
 
 pub trait ValidateInitialContext {

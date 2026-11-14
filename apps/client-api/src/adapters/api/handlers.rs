@@ -6,6 +6,7 @@ use crate::adapters::api::state::AppState;
 use crate::application::{
     CreateClientRequest, DeleteClientRequest, FindClientsRequest, GetClientByIdRequest,
 };
+use crate::constants::{CLIENT_OUTPUT_EXCHANGE, EVENT_SOURCE, ROUTING_KEY};
 use crate::domain::ClientId;
 use crate::infrastructure::tenant_state;
 use axum::extract::{Path, Query, State};
@@ -16,10 +17,6 @@ use shared::entities::Address;
 use shared::errors::api_error::ApiError;
 use shared::types::PageRequest;
 use tsid::TSID;
-
-const CLIENT_EXCHANGE_NAME: &str = "client.output";
-const ROUTING_KEY: &str = "*";
-const EVENT_SOURCE: &str = "client-api";
 
 pub async fn create_client(
     State(state): State<AppState>,
@@ -79,7 +76,7 @@ async fn publish_message(state: AppState, event: &ClientEvent) -> Result<(), Api
     if let Some(publisher) = state.message_publisher.as_ref() {
         publisher
             .publish_json(
-                CLIENT_EXCHANGE_NAME,
+                CLIENT_OUTPUT_EXCHANGE,
                 ROUTING_KEY,
                 event,
                 Some(MessageHeaders::create_default(

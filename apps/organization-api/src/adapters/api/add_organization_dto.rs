@@ -2,8 +2,7 @@ use crate::adapters::api::organization_shared_dto::default_document_type;
 use crate::adapters::api::organization_shared_dto::parse_document_type;
 use crate::application::AddOrganizationRequest;
 use serde::{Deserialize, Serialize};
-use shared::entities::Address;
-use shared::entities::converter::serde_functions::default_user;
+use shared::entities::{Address, default_user};
 use shared::errors::api_error::ApiError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

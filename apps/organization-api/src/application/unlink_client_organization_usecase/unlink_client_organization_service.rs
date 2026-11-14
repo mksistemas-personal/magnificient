@@ -8,9 +8,7 @@ use crate::application::unlink_client_organization_usecase::steps::{
     UnlinkClientOrganizationContext, ValidateInitialContext,
 };
 use async_trait::async_trait;
-use shared::entities::BusinessError;
-use shared::entities::use_case::context::Context;
-use shared::entities::use_case::use_case_traits::AsyncDeleteEntityUseCase;
+use shared::entities::{AsyncDeleteEntityUseCase, BusinessError, Context};
 
 #[derive(Clone)]
 pub struct UnlinkClientOrganizationService {

@@ -3,10 +3,7 @@ use crate::application::delete_usecase::data::{DeleteClientRequest, InitialConte
 use crate::application::delete_usecase::states::Initial;
 use crate::application::delete_usecase::steps::{DeleteClientContext, ValidateInitialContext};
 use async_trait::async_trait;
-use shared::entities::{
-    BusinessError,
-    use_case::{context::Context, use_case_traits::AsyncDeleteEntityUseCase},
-};
+use shared::entities::{AsyncDeleteEntityUseCase, BusinessError, Context};
 #[derive(Clone)]
 pub struct DeleteClientService {
     persistence: ClientPersistence,

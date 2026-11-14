@@ -5,9 +5,7 @@ use crate::application::all_usecase::steps::{FindOrganizationsContext, ValidateI
 use crate::application::service_constructors::FromPersistence;
 use crate::domain::Organization;
 use async_trait::async_trait;
-use shared::entities::BusinessError;
-use shared::entities::use_case::context::Context;
-use shared::entities::use_case::use_case_traits::AsyncGetAllUseCase;
+use shared::entities::{AsyncGetAllUseCase, BusinessError, Context};
 use shared::types::page::Page;
 
 #[derive(Clone)]

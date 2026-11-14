@@ -44,7 +44,7 @@ fn setup_test_app() -> axum::Router {
     );
     let repository = organizacao_api::infrastructure::InMemoryOrganizationRepository::new();
     let address_repository =
-        shared::entities::address::repository::InMemoryAddressRepository::new();
+        shared::entities::InMemoryAddressRepository::new();
     let state =
         AppState::new_with_repositories(Arc::new(config), db, repository, address_repository);
     create_router(state)

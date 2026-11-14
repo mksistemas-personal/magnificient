@@ -3,8 +3,7 @@ use crate::application::OrganizationPersistence;
 use crate::application::delete_usecase::data::{InitialContextData, ValidatedContextData};
 use crate::application::delete_usecase::states::{Initial, Validated};
 use async_trait::async_trait;
-use shared::entities::BusinessError;
-use shared::entities::use_case::context::Context;
+use shared::entities::{BusinessError, Context};
 
 pub trait ValidateInitialContext {
     fn validate(self) -> Result<Context<Validated, ValidatedContextData>, BusinessError>;

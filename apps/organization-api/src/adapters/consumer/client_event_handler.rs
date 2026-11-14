@@ -7,7 +7,7 @@ use crate::adapters::consumer::client_event_handler::states::Initial;
 use async_trait::async_trait;
 use client_contracts::v1::{ClientEvent, ClientEventType};
 use messaging::{MessageHandler, MessageHandlerError, MessageMetadata};
-use shared::entities::use_case::context::Context;
+use shared::entities::Context;
 
 pub struct ClientEventHandler {
     app_state: AppState,

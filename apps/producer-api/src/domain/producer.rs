@@ -1,5 +1,4 @@
-use shared::entities::audit::audit_fields::AuditFields;
-use shared::entities::{Document, EntityId};
+use shared::entities::{AuditFields, Document, EntityId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct ProducerMarker;

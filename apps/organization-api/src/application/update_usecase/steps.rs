@@ -9,8 +9,7 @@ use crate::application::update_usecase::states::{
 };
 use crate::domain::Organization;
 use async_trait::async_trait;
-use shared::entities::use_case::context::Context;
-use shared::entities::{AuditFields, BusinessError};
+use shared::entities::{AuditFields, BusinessError, Context};
 
 pub trait ValidateInitialContext {
     fn validate(

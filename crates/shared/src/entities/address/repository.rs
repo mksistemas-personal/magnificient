@@ -1,5 +1,5 @@
 use crate::entities::address::Address;
-use crate::entities::address::errors::AddressBusinessErrors;
+use crate::entities::AddressBusinessErrors;
 use crate::entities::{AuditFields, BusinessError};
 use async_trait::async_trait;
 use sqlx::PgPool;

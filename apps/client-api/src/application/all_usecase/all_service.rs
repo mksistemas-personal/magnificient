@@ -4,10 +4,7 @@ use crate::application::all_usecase::states::Initial;
 use crate::application::all_usecase::steps::{FindClientsContext, ValidateInitialContext};
 use crate::domain::Client;
 use async_trait::async_trait;
-use shared::entities::{
-    BusinessError,
-    use_case::{context::Context, use_case_traits::AsyncGetAllUseCase},
-};
+use shared::entities::{AsyncGetAllUseCase, BusinessError, Context};
 use shared::types::Page;
 #[derive(Clone)]
 pub struct FindClientsService {

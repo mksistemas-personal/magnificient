@@ -6,8 +6,7 @@ use crate::application::unlink_client_organization_usecase::data::{
 use crate::application::unlink_client_organization_usecase::states::{Initial, Validated};
 use crate::domain::OrganizationEntityType;
 use async_trait::async_trait;
-use shared::entities::BusinessError;
-use shared::entities::use_case::context::Context;
+use shared::entities::{BusinessError, Context};
 
 pub trait ValidateInitialContext {
     fn validate(self) -> Result<Context<Validated, ValidatedContextData>, BusinessError>;

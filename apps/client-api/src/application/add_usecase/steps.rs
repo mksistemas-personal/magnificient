@@ -6,8 +6,7 @@ use crate::application::add_usecase::data::{
 use crate::application::add_usecase::states::{AddressValidated, Built, ClientValidated, Initial};
 use crate::domain::{Client, ClientId};
 use async_trait::async_trait;
-use shared::entities::use_case::context::Context;
-use shared::entities::{AuditFields, BusinessError};
+use shared::entities::{AuditFields, BusinessError, Context};
 use tsid::create_tsid;
 
 pub trait ValidateInitialContext {

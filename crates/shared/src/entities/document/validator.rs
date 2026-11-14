@@ -1,10 +1,10 @@
 use crate::errors::DocumentError;
 
-pub fn sanitize_digits(val: &str) -> String {
+pub(crate) fn sanitize_digits(val: &str) -> String {
     val.chars().filter(|c| c.is_ascii_digit()).collect()
 }
 
-pub fn validate_cnpj(val: &str) -> Result<(), DocumentError> {
+pub(crate) fn validate_cnpj(val: &str) -> Result<(), DocumentError> {
     let digits = sanitize_digits(val);
     if digits.is_empty() {
         return Err(DocumentError::EmptyDocument);
@@ -57,7 +57,7 @@ pub fn validate_cnpj(val: &str) -> Result<(), DocumentError> {
     Ok(())
 }
 
-pub fn format_cnpj(val: &str) -> String {
+pub(crate) fn format_cnpj(val: &str) -> String {
     let digits = sanitize_digits(val);
     if digits.len() == 14 {
         format!(
@@ -73,7 +73,7 @@ pub fn format_cnpj(val: &str) -> String {
     }
 }
 
-pub fn validate_cpf(val: &str) -> Result<(), DocumentError> {
+pub(crate) fn validate_cpf(val: &str) -> Result<(), DocumentError> {
     let digits = sanitize_digits(val);
     if digits.is_empty() {
         return Err(DocumentError::EmptyDocument);
@@ -123,7 +123,7 @@ pub fn validate_cpf(val: &str) -> Result<(), DocumentError> {
     Ok(())
 }
 
-pub fn format_cpf(val: &str) -> String {
+pub(crate) fn format_cpf(val: &str) -> String {
     let digits = sanitize_digits(val);
     if digits.len() == 11 {
         format!(
@@ -138,7 +138,7 @@ pub fn format_cpf(val: &str) -> String {
     }
 }
 
-pub fn validate_cuit(val: &str) -> Result<(), DocumentError> {
+pub(crate) fn validate_cuit(val: &str) -> Result<(), DocumentError> {
     let digits = sanitize_digits(val);
     if digits.is_empty() {
         return Err(DocumentError::EmptyDocument);
@@ -174,7 +174,7 @@ pub fn validate_cuit(val: &str) -> Result<(), DocumentError> {
     Ok(())
 }
 
-pub fn format_cuit(val: &str) -> String {
+pub(crate) fn format_cuit(val: &str) -> String {
     let digits = sanitize_digits(val);
     if digits.len() == 11 {
         format!("{}-{}-{}", &digits[0..2], &digits[2..10], &digits[10..11])
@@ -183,7 +183,7 @@ pub fn format_cuit(val: &str) -> String {
     }
 }
 
-pub fn validate_dni(val: &str) -> Result<(), DocumentError> {
+pub(crate) fn validate_dni(val: &str) -> Result<(), DocumentError> {
     let digits = sanitize_digits(val);
     if digits.is_empty() {
         return Err(DocumentError::EmptyDocument);
@@ -197,7 +197,7 @@ pub fn validate_dni(val: &str) -> Result<(), DocumentError> {
     Ok(())
 }
 
-pub fn format_dni(val: &str) -> String {
+pub(crate) fn format_dni(val: &str) -> String {
     let digits = sanitize_digits(val);
     if digits.len() == 8 {
         format!("{}.{}.{}", &digits[0..2], &digits[2..5], &digits[5..8])

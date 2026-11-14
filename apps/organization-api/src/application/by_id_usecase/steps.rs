@@ -4,8 +4,7 @@ use crate::application::by_id_usecase::data::{InitialContextData, ValidatedConte
 use crate::application::by_id_usecase::states::{Initial, Validated};
 use crate::domain::Organization;
 use async_trait::async_trait;
-use shared::entities::BusinessError;
-use shared::entities::use_case::context::Context;
+use shared::entities::{BusinessError, Context};
 
 pub trait ValidateInitialContext {
     fn validate(self) -> Result<Context<Validated, ValidatedContextData>, BusinessError>;

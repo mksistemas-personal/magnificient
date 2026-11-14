@@ -12,11 +12,10 @@ use crate::infrastructure::PostgresAddressRepository;
 use crate::infrastructure::postgres_organization_repository::PostgresOrganizationRepository;
 use database::DatabaseConnection;
 use messaging::RabbitMqPublisher;
-use shared::entities::use_case::use_case_traits::AsyncUpdateEntityUseCase;
-use shared::entities::use_case::{
-    AsyncDeleteEntityUseCase, AsyncGetAllUseCase, AsyncGetByIdUseCase,
+use shared::entities::{
+    AddressRepository, AsyncAddEntityUseCase, AsyncDeleteEntityUseCase, AsyncGetAllUseCase,
+    AsyncGetByIdUseCase, AsyncUpdateEntityUseCase, BusinessError,
 };
-use shared::entities::{AddressRepository, AsyncAddEntityUseCase};
 use shared::types::page::Page;
 use std::sync::Arc;
 
@@ -48,12 +47,12 @@ impl AppState {
         &self,
         schema: &str,
         tenant: &str,
-    ) -> Result<Self, shared::entities::BusinessError> {
+    ) -> Result<Self, BusinessError> {
         let uow = self
             .db
             .unit_of_work()
             .with_schema(schema.to_owned())
-            .map_err(|e| shared::entities::BusinessError::invalid_data(e.to_string()))?;
+            .map_err(|e| BusinessError::invalid_data(e.to_string()))?;
         let pool = self.db.pool().clone();
         let repository = PostgresOrganizationRepository::new(pool.clone());
         let address_repository = PostgresAddressRepository::new(pool.clone());

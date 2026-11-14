@@ -1,13 +1,11 @@
+use crate::constants::{
+    CLIENT_INPUT_EXCHANGE, CLIENT_INPUT_QUEUE, CLIENT_OUTPUT_EXCHANGE, ORGANIZATION_EVENT,
+    ORGANIZATION_OUTPUT_EXCHANGE, ROUTING_KEY,
+};
 use lapin::options::{ExchangeBindOptions, QueueBindOptions};
 use lapin::types::{AMQPValue, FieldTable, LongString, ShortString};
 use rabbit_warren::{ExchangeKind, RmqClient};
 use std::error::Error;
-
-const ORGANIZATION_OUTPUT_EXCHANGE: &str = "organization.output";
-const CLIENT_INPUT_EXCHANGE: &str = "client.input";
-const CLIENT_INPUT_QUEUE: &str = "client-input.main";
-const ROUTING_KEY: &str = "*";
-const ORGANIZATION_EVENT: &str = "OrganizationEvent";
 
 pub struct RabbitmqSeed<'a> {
     client: &'a RmqClient,
@@ -23,7 +21,7 @@ impl<'a> RabbitmqSeed<'a> {
             .declare_exchange(CLIENT_INPUT_EXCHANGE, ExchangeKind::Headers, true)
             .await?;
         self.client
-            .declare_exchange("client.output", ExchangeKind::Headers, true)
+            .declare_exchange(CLIENT_OUTPUT_EXCHANGE, ExchangeKind::Headers, true)
             .await?;
 
         let mut arguments = FieldTable::default();

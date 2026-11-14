@@ -8,8 +8,7 @@ use crate::application::add_usecase::steps::{
 use crate::application::service_constructors::FromPersistence;
 use crate::domain::Organization;
 use async_trait::async_trait;
-use shared::entities::use_case::context::Context;
-use shared::entities::{AsyncAddEntityUseCase, BusinessError};
+use shared::entities::{AsyncAddEntityUseCase, BusinessError, Context};
 
 #[derive(Clone)]
 pub struct AddOrganizationService {

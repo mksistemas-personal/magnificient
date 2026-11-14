@@ -1,5 +1,4 @@
-use shared::entities::audit::audit_fields::AuditFields;
-use shared::entities::{Address, EntityId};
+use shared::entities::{Address, AuditFields, EntityId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct ClientMarker;

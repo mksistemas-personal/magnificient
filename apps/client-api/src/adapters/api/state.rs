@@ -8,11 +8,9 @@ use crate::domain::Client;
 use crate::infrastructure::PostgresClientRepository;
 use database::DatabaseConnection;
 use messaging::RabbitMqPublisher;
-use shared::entities::BusinessError;
-use shared::entities::address::repository::PostgresAddressRepository;
-use shared::entities::use_case::use_case_traits::{
+use shared::entities::{
     AsyncAddEntityUseCase, AsyncDeleteEntityUseCase, AsyncGetAllUseCase, AsyncGetByIdUseCase,
-    AsyncUpdateEntityUseCase,
+    AsyncUpdateEntityUseCase, BusinessError, PostgresAddressRepository,
 };
 use shared::types::Page;
 use std::sync::Arc;

@@ -1,8 +1,8 @@
 use crate::entities::address::Address;
-use crate::entities::address::errors::AddressBusinessErrors;
+use crate::entities::AddressBusinessErrors;
 use crate::errors::AddressError;
 
-pub trait AddressValidator: Send + Sync {
+pub(crate) trait AddressValidator: Send + Sync {
     fn validate(&self, address: &Address) -> Result<(), AddressError>;
 
     fn sanitize_postal_code(&self, postal_code: &str) -> String {
@@ -14,11 +14,11 @@ pub trait AddressValidator: Send + Sync {
     }
 }
 
-pub fn is_blank(value: &str) -> bool {
+pub(crate) fn is_blank(value: &str) -> bool {
     value.trim().is_empty()
 }
 
-pub fn sanitize_digits(val: &str) -> String {
+pub(crate) fn sanitize_digits(val: &str) -> String {
     val.chars().filter(|c| c.is_ascii_digit()).collect()
 }
 
@@ -32,7 +32,7 @@ const BRAZIL_VALID_UFS: [&str; 27] = [
 ];
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct BrazilAddressValidator;
+pub(crate) struct BrazilAddressValidator;
 
 impl AddressValidator for BrazilAddressValidator {
     fn validate(&self, address: &Address) -> Result<(), AddressError> {
@@ -90,7 +90,7 @@ impl AddressValidator for BrazilAddressValidator {
 // ==========================================
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct ArgentinaAddressValidator;
+pub(crate) struct ArgentinaAddressValidator;
 
 impl AddressValidator for ArgentinaAddressValidator {
     fn validate(&self, address: &Address) -> Result<(), AddressError> {
@@ -157,7 +157,7 @@ const US_VALID_STATES: [&str; 56] = [
 ];
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct UnitedStatesAddressValidator;
+pub(crate) struct UnitedStatesAddressValidator;
 
 impl AddressValidator for UnitedStatesAddressValidator {
     fn validate(&self, address: &Address) -> Result<(), AddressError> {
@@ -209,7 +209,7 @@ impl AddressValidator for UnitedStatesAddressValidator {
 // ==========================================
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct GenericAddressValidator;
+pub(crate) struct GenericAddressValidator;
 
 impl AddressValidator for GenericAddressValidator {
     fn validate(&self, address: &Address) -> Result<(), AddressError> {
@@ -231,7 +231,7 @@ impl AddressValidator for GenericAddressValidator {
 }
 
 /// Returns the appropriate `AddressValidator` for the country code or name.
-pub fn validator_for_country(country_code_or_name: &str) -> Box<dyn AddressValidator> {
+pub(crate) fn validator_for_country(country_code_or_name: &str) -> Box<dyn AddressValidator> {
     match country_code_or_name.trim().to_uppercase().as_str() {
         "BR" | "BRA" | "BRASIL" | "BRAZIL" => Box::new(BrazilAddressValidator),
         "AR" | "ARG" | "ARGENTINA" => Box::new(ArgentinaAddressValidator),

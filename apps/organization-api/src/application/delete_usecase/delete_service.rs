@@ -6,9 +6,7 @@ use crate::application::delete_usecase::steps::{
 };
 use crate::application::service_constructors::FromPersistence;
 use async_trait::async_trait;
-use shared::entities::BusinessError;
-use shared::entities::use_case::context::Context;
-use shared::entities::use_case::use_case_traits::AsyncDeleteEntityUseCase;
+use shared::entities::{AsyncDeleteEntityUseCase, BusinessError, Context};
 
 #[derive(Clone)]
 pub struct DeleteOrganizationService {

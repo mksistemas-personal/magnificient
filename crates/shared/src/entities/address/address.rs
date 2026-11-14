@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use tsid::TSID;
 
 use crate::entities::address::validator::{AddressValidator, validator_for_country};
-use crate::entities::audit::audit_fields::AuditFields;
+use crate::entities::AuditFields;
 use crate::errors::AddressError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -116,7 +116,7 @@ impl Address {
     }
 
     /// Returns the appropriate validator for the country code or name.
-    pub fn validator(&self) -> Box<dyn AddressValidator> {
+    pub(crate) fn validator(&self) -> Box<dyn AddressValidator> {
         if !self.country_code.trim().is_empty() {
             validator_for_country(&self.country_code)
         } else {

@@ -7,9 +7,7 @@ use crate::application::by_id_usecase::steps::{
 use crate::application::service_constructors::FromPersistence;
 use crate::domain::Organization;
 use async_trait::async_trait;
-use shared::entities::BusinessError;
-use shared::entities::use_case::context::Context;
-use shared::entities::use_case::use_case_traits::AsyncGetByIdUseCase;
+use shared::entities::{AsyncGetByIdUseCase, BusinessError, Context};
 
 #[derive(Clone)]
 pub struct FindOrganizationByIdService {

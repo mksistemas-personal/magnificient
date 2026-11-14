@@ -1,7 +1,7 @@
 use crate::application::DeleteOrganizationRequest;
 use crate::domain::OrganizationId;
 use serde::{Deserialize, Serialize};
-use shared::entities::converter::serde_functions::default_user;
+use shared::entities::default_user;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DeleteOrganizationParams {

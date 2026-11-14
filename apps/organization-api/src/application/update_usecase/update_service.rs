@@ -8,9 +8,7 @@ use crate::application::update_usecase::steps::{
 };
 use crate::domain::Organization;
 use async_trait::async_trait;
-use shared::entities::BusinessError;
-use shared::entities::use_case::context::Context;
-use shared::entities::use_case::use_case_traits::AsyncUpdateEntityUseCase;
+use shared::entities::{AsyncUpdateEntityUseCase, BusinessError, Context};
 
 #[derive(Clone)]
 pub struct UpdateOrganizationService {
@@ -67,8 +65,10 @@ mod tests {
     use crate::domain::{Organization, OrganizationId, OrganizationRepository};
     use crate::errors::OrganizationBusinessErrors;
     use crate::infrastructure::InMemoryOrganizationRepository;
-    use shared::entities::address::repository::InMemoryAddressRepository;
-    use shared::entities::{Address, AddressRepository, AuditFields, Document, DocumentType, TSID};
+    use shared::entities::{
+        Address, AddressRepository, AuditFields, Document, DocumentType, InMemoryAddressRepository,
+        TSID,
+    };
 
     async fn seed(repo: &InMemoryOrganizationRepository, id: u64) -> Organization {
         let org_id = OrganizationId::new(TSID::from(id));

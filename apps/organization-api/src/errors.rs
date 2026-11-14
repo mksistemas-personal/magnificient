@@ -1,4 +1,4 @@
-use shared::entities::use_case::business_error::BusinessError;
+use shared::entities::BusinessError;
 
 /// Centralizes `BusinessError` constants and constructors for the organization domain,
 /// standardizing business messages and errors used by use cases.

@@ -6,9 +6,7 @@ use crate::application::add_usecase::steps::{
 };
 use crate::domain::Client;
 use async_trait::async_trait;
-use shared::entities::BusinessError;
-use shared::entities::use_case::context::Context;
-use shared::entities::use_case::use_case_traits::AsyncAddEntityUseCase;
+use shared::entities::{AsyncAddEntityUseCase, BusinessError, Context};
 
 #[derive(Clone)]
 pub struct CreateClientService {

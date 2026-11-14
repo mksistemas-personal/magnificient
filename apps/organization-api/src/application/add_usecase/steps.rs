@@ -8,8 +8,7 @@ use crate::application::add_usecase::states::{
 };
 use crate::domain::{Organization, OrganizationId};
 use async_trait::async_trait;
-use shared::entities::use_case::context::Context;
-use shared::entities::{AuditFields, BusinessError, Document};
+use shared::entities::{AuditFields, BusinessError, Context, Document};
 use tsid::create_tsid;
 
 pub trait ValidateInitialContext {

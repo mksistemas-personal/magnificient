@@ -1,8 +1,7 @@
 use crate::application::UpdateOrganizationRequest;
 use crate::domain::OrganizationId;
 use serde::{Deserialize, Serialize};
-use shared::entities::Address;
-use shared::entities::converter::serde_functions::default_user;
+use shared::entities::{Address, default_user};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UpdateOrganizationDto {

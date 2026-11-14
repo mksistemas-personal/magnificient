@@ -2,8 +2,7 @@ use crate::application::{CreateClientRequest, UpdateClientRequest};
 use crate::domain::{Client, ClientId, OrganizationId};
 use crate::errors::ClientBusinessErrors;
 use serde::{Deserialize, Serialize};
-use shared::entities::converter::serde_functions::default_user;
-use shared::entities::{Address, AuditFields};
+use shared::entities::{Address, AuditFields, BusinessError, default_user};
 use shared::errors::api_error::ApiError;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -96,9 +95,9 @@ pub fn parse_id(value: &str) -> Result<OrganizationId, ApiError> {
         .map_err(|_| ApiError::BadRequest(ClientBusinessErrors::ORGANIZATION_ID_INVALID.into()))
 }
 
-pub fn map_api_error(error: shared::entities::BusinessError) -> ApiError {
+pub fn map_api_error(error: BusinessError) -> ApiError {
     match error {
-        shared::entities::BusinessError::NotFound(message) => ApiError::NotFound(message),
+        BusinessError::NotFound(message) => ApiError::NotFound(message),
         other => other.into(),
     }
 }

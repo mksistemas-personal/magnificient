@@ -56,6 +56,38 @@ struct OrganizationRow {
     addr_updated_by: Option<String>,
 }
 
+#[derive(sqlx::FromRow)]
+struct OrganizationLinkRow {
+    id: i64,
+    organization_id: i64,
+    entity_id: i64,
+    entity_type: String,
+    linked_at: chrono::DateTime<chrono::Utc>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    created_by: String,
+}
+
+impl TryFrom<OrganizationLinkRow> for OrganizationLink {
+    type Error = BusinessError;
+
+    fn try_from(row: OrganizationLinkRow) -> Result<Self, Self::Error> {
+        let entity_type = row
+            .entity_type
+            .parse::<OrganizationEntityType>()
+            .map_err(|err| BusinessError::internal(format!("Invalid entity_type: {err}")))?;
+
+        Ok(OrganizationLink::new(
+            OrganizationId::new(TSID::from(row.organization_id as u64)),
+            TSID::from(row.entity_id as u64),
+            entity_type,
+            row.created_by,
+        )
+        .with_id(TSID::from(row.id as u64))
+        .with_linked_at(row.linked_at)
+        .with_created_at(row.created_at))
+    }
+}
+
 impl TryFrom<OrganizationRow> for Organization {
     type Error = BusinessError;
 
@@ -393,6 +425,34 @@ impl PostgresOrganizationRepository {
 
         Ok(())
     }
+
+    async fn execute_find_links_by_organization_id(
+        conn: &mut PgConnection,
+        organization_id: TSID,
+    ) -> Result<Vec<OrganizationLink>, BusinessError> {
+        let org_id_raw = organization_id.number() as i64;
+        let query = r#"
+            SELECT id, organization_id, entity_id, entity_type::text AS entity_type,
+                   linked_at, created_at, created_by
+            FROM organization_links
+            WHERE organization_id = $1
+            ORDER BY linked_at ASC
+        "#;
+
+        let rows = sqlx::query_as::<_, OrganizationLinkRow>(query)
+            .bind(org_id_raw)
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|err| {
+                error!(
+                    "Failed to find organization links for organization ID {}: {:?}",
+                    organization_id, err
+                );
+                BusinessError::internal(format!("Failed to query organization links: {err}"))
+            })?;
+
+        rows.into_iter().map(TryInto::try_into).collect()
+    }
 }
 
 impl From<PgPool> for PostgresOrganizationRepository {
@@ -472,6 +532,14 @@ impl OrganizationRepository for PostgresOrganizationRepository {
         entity_type: OrganizationEntityType,
     ) -> Result<(), BusinessError> {
         Self::execute_unlink_entity(conn, entity_id, entity_type).await
+    }
+
+    async fn find_links_by_organization_id(
+        &self,
+        conn: &mut PgConnection,
+        organization_id: TSID,
+    ) -> Result<Vec<OrganizationLink>, BusinessError> {
+        Self::execute_find_links_by_organization_id(conn, organization_id).await
     }
 }
 

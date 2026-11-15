@@ -136,4 +136,20 @@ impl OrganizationPersistence {
             })
             .await
     }
+
+    pub async fn find_links_by_organization_id(
+        &self,
+        organization_id: TSID,
+    ) -> Result<Vec<OrganizationLink>, BusinessError> {
+        let repository = Arc::clone(&self.repository);
+        self.executor
+            .run(move |conn| {
+                Box::pin(async move {
+                    repository
+                        .find_links_by_organization_id(conn, organization_id)
+                        .await
+                })
+            })
+            .await
+    }
 }

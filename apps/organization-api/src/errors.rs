@@ -1,3 +1,4 @@
+use crate::domain::LinkedEntity;
 use shared::entities::BusinessError;
 
 /// Centralizes `BusinessError` constants and constructors for the organization domain,
@@ -34,6 +35,9 @@ impl OrganizationBusinessErrors {
 
     /// Error message for operations on inactive organizations.
     pub const ORG_INACTIVE: &'static str = "organization.inactive";
+
+    /// Error message for an organization that has linked entities.
+    pub const ORG_HAS_LINKED_ENTITIES: &'static str = "organization.has.linked.entities";
 
     // --- Convenience methods for creating BusinessError instances ---
 
@@ -84,6 +88,23 @@ impl OrganizationBusinessErrors {
     /// Returns `BusinessError::NotAllowed` when the organization is inactive.
     pub fn inactive() -> BusinessError {
         BusinessError::not_allowed(Self::ORG_INACTIVE)
+    }
+
+    /// Returns `BusinessError::NotAllowed` when the organization has linked entities.
+    pub fn has_linked_entities(linked_entities: &[LinkedEntity]) -> BusinessError {
+        let serialized = serde_json::to_string(linked_entities).unwrap_or_default();
+        BusinessError::not_allowed(format!("{}: {}", Self::ORG_HAS_LINKED_ENTITIES, serialized))
+    }
+
+    /// Extracts `Vec<LinkedEntity>` from a `BusinessError` if it matches `ORG_HAS_LINKED_ENTITIES`.
+    pub fn extract_linked_entities(error: &BusinessError) -> Option<Vec<LinkedEntity>> {
+        if let BusinessError::NotAllowed(msg) = error {
+            if let Some(pos) = msg.find(':') {
+                let json_part = msg[pos + 1..].trim();
+                return serde_json::from_str::<Vec<LinkedEntity>>(json_part).ok();
+            }
+        }
+        None
     }
 }
 

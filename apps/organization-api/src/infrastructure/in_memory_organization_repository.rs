@@ -186,6 +186,21 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
         links.retain(|l| !(l.entity_id() == entity_id && l.entity_type() == entity_type));
         Ok(())
     }
+
+    async fn find_links_by_organization_id(
+        &self,
+        _conn: &mut PgConnection,
+        organization_id: TSID,
+    ) -> Result<Vec<OrganizationLink>, BusinessError> {
+        let org_id = OrganizationId::new(organization_id);
+        let links = self.links.read().unwrap();
+        let result = links
+            .iter()
+            .filter(|l| l.organization_id() == org_id)
+            .cloned()
+            .collect();
+        Ok(result)
+    }
 }
 
 #[cfg(test)]

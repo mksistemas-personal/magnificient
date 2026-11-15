@@ -111,3 +111,42 @@ impl OrganizationLink {
         &self.created_by
     }
 }
+
+/// Identificador e tipo específico de uma entidade vinculada a uma organização.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LinkedEntity {
+    pub id: TSID,
+    pub entity_type: OrganizationEntityType,
+}
+
+impl LinkedEntity {
+    pub fn new(id: TSID, entity_type: OrganizationEntityType) -> Self {
+        Self { id, entity_type }
+    }
+
+    pub fn id(&self) -> TSID {
+        self.id
+    }
+
+    pub fn entity_type(&self) -> OrganizationEntityType {
+        self.entity_type
+    }
+}
+
+impl From<&OrganizationLink> for LinkedEntity {
+    fn from(link: &OrganizationLink) -> Self {
+        Self {
+            id: link.entity_id(),
+            entity_type: link.entity_type(),
+        }
+    }
+}
+
+impl From<OrganizationLink> for LinkedEntity {
+    fn from(link: OrganizationLink) -> Self {
+        Self {
+            id: link.entity_id(),
+            entity_type: link.entity_type(),
+        }
+    }
+}

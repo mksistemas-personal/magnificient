@@ -63,4 +63,11 @@ pub trait OrganizationRepository: Send + Sync {
         entity_id: TSID,
         entity_type: OrganizationEntityType,
     ) -> Result<(), BusinessError>;
+
+    /// Returns all entity links associated with the given organization.
+    async fn find_links_by_organization_id(
+        &self,
+        conn: &mut PgConnection,
+        organization_id: TSID,
+    ) -> Result<Vec<OrganizationLink>, BusinessError>;
 }

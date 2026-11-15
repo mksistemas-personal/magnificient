@@ -1,16 +1,13 @@
+use crate::constants::{
+    CLIENT_EVENT, CLIENT_OUTPUT_EXCHANGE, ORGANIZATION_INPUT_EXCHANGE, ORGANIZATION_INPUT_QUEUE,
+    ORGANIZATION_OUTPUT_EXCHANGE, ROUTING_KEY,
+};
 use lapin::Channel;
 use lapin::options::{ExchangeBindOptions, QueueBindOptions};
 use lapin::types::{AMQPValue, FieldTable, LongString, ShortString};
 use rabbit_warren::{ExchangeKind, RmqClient};
 use std::error::Error;
 use std::sync::Arc;
-
-const CLIENT_EVENT: &str = "ClientEvent";
-const ORGANIZATION_INPUT_EXCHANGE: &str = "organization.input";
-const ORGANIZATION_OUTPUT_EXCHANGE: &str = "organization.output";
-const CLIENT_OUTPUT_EXCHANGE: &str = "client.output";
-const ORGANIZATION_INPUT_QUEUE: &str = "organization-input.main";
-const ROUTING_KEY: &str = "*";
 
 pub struct RabbitmqSeed<'a> {
     pub client: &'a RmqClient,

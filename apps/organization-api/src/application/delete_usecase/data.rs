@@ -22,3 +22,7 @@ pub struct InitialContextData {
 pub struct ValidatedContextData {
     pub request: DeleteOrganizationRequest,
 }
+
+pub struct LinksCheckedContextData {
+    pub request: DeleteOrganizationRequest,
+}

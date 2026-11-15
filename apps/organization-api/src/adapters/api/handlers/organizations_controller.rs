@@ -8,6 +8,7 @@ use crate::application::{
     AddOrganizationRequest, DeleteOrganizationRequest, FindAllOrganizationsRequest,
     FindOrganizationByIdRequest, UpdateOrganizationRequest,
 };
+use crate::constants::{EVENT_SOURCE, ORGANIZATION_OUTPUT_EXCHANGE, ROUTING_KEY};
 use crate::domain::{Organization, OrganizationId};
 use axum::extract::{Path, Query, State};
 use axum::{Json, http::StatusCode, response::IntoResponse};
@@ -94,11 +95,6 @@ pub async fn get_all_organizations_for_tenant(
     get_all_organizations(State(scoped_state(&state, &tenant).await?), Query(params)).await
 }
 
-const ORGANIZATION_EXCHANGE_NAME: &str = "organization.output";
-const ROUTING_KEY: &str = "*";
-
-const EVENT_SOURCE: &str = "organization-api";
-
 pub async fn create_organization(
     State(state): State<AppState>,
     Json(payload): Json<CreateOrganizationDto>,
@@ -142,7 +138,7 @@ async fn publish_message(state: AppState, event: &OrganizationEvent) -> Result<(
     if let Some(publisher) = state.message_publisher.as_ref() {
         publisher
             .publish_json(
-                ORGANIZATION_EXCHANGE_NAME,
+                ORGANIZATION_OUTPUT_EXCHANGE,
                 ROUTING_KEY,
                 &event,
                 Some(MessageHeaders::create_default(
@@ -162,9 +158,7 @@ fn organization_added_event(organization: &Organization) -> OrganizationEvent {
         organization.id().to_string(),
         organization.name().to_string(),
         organization_document_event(organization.document()),
-        organization
-            .address()
-            .map(organization_address_event),
+        organization.address().map(organization_address_event),
     )
 }
 
@@ -173,9 +167,7 @@ fn organization_updated_event(organization: &Organization) -> OrganizationEvent 
         organization.id().to_string(),
         organization.name().to_string(),
         organization_document_event(organization.document()),
-        organization
-            .address()
-            .map(organization_address_event),
+        organization.address().map(organization_address_event),
     )
 }
 

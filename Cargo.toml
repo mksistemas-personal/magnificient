@@ -3,12 +3,13 @@ resolver = "2"
 members = [
     "apps/organization-api",
     "apps/client-api",
-    "apps/producer-api",
+    "apps/supplier-api",
     "crates/shared",
     "crates/database",
     "crates/messaging",
     "crates/organization-contracts",
     "crates/client-contracts",
+    "crates/supplier-contracts",
     "crates/common-contracts",
 ]
 

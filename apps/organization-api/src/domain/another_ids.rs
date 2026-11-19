@@ -4,3 +4,8 @@ use shared::entities::EntityId;
 pub struct ClientMarker;
 
 pub type ClientId = EntityId<ClientMarker>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct SupplierMarker;
+
+pub type SupplierId = EntityId<SupplierMarker>;

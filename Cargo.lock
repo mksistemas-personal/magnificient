@@ -1915,6 +1915,7 @@ dependencies = [
  "serde_json",
  "shared",
  "sqlx",
+ "supplier-contracts",
  "tokio",
  "tower",
  "tower-http",

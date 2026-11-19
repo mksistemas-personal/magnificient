@@ -1,6 +1,6 @@
-mod data;
-mod states;
-mod steps;
+pub mod data;
+pub mod states;
+pub mod steps;
 
 use crate::adapters::api::AppState;
 use crate::adapters::consumer::organization_event_handler::states::Initial;
@@ -17,19 +17,19 @@ impl OrganizationEventHandler {
         Self { state }
     }
 
-    async fn handler_delete_client_organization(
+    async fn handler_delete_supplier_organization(
         &self,
         event: OrganizationEvent,
         metadata: MessageMetadata,
     ) -> Result<(), MessageHandlerError> {
-        use steps::{DeleteOrganizationClients, ParseOrganizationId, ResolveTenant, ValidateEvent};
+        use steps::{DeleteOrganizationSuppliers, ParseOrganizationId, ResolveTenant, ValidateEvent};
 
         Context::<Initial, _>::new(data::InitialContextData { event, metadata })
             .validate_event()?
             .resolve_tenant(&self.state)
             .await?
             .parse_organization_id()?
-            .delete_organization_clients()
+            .delete_organization_suppliers()
             .await
     }
 }
@@ -44,7 +44,7 @@ impl MessageHandler<OrganizationEvent> for OrganizationEventHandler {
         use organization_contracts::v1::OrganizationEventType;
 
         if event.event_type == OrganizationEventType::DeleteOrganization {
-            self.handler_delete_client_organization(event, metadata)
+            self.handler_delete_supplier_organization(event, metadata)
                 .await?;
         }
         Ok(())

@@ -2,7 +2,8 @@ use crate::application::{
     AddOrganizationRequest, AddOrganizationService, DeleteOrganizationRequest,
     DeleteOrganizationService, FindAllOrganizationsRequest, FindAllOrganizationsService,
     FindOrganizationByIdRequest, FromPersistence, GetOrganizationByIdService,
-    LinkClientOrganizationService, OrganizationPersistence, UnlinkClientOrganizationService,
+    LinkClientOrganizationService, LinkSupplierOrganizationService, OrganizationPersistence,
+    UnlinkClientOrganizationService, UnlinkSupplierOrganizationService,
     UpdateOrganizationRequest, UpdateOrganizationService,
 };
 use crate::config::organization_config::OrganizationAppConfig;
@@ -38,6 +39,8 @@ pub struct AppState {
         Arc<dyn AsyncGetAllUseCase<FindAllOrganizationsRequest, Page<Organization>>>,
     pub link_client_organization: Arc<LinkClientOrganizationService>,
     pub unlink_client_organization: Arc<UnlinkClientOrganizationService>,
+    pub link_supplier_organization: Arc<LinkSupplierOrganizationService>,
+    pub unlink_supplier_organization: Arc<UnlinkSupplierOrganizationService>,
 }
 
 impl AppState {
@@ -151,7 +154,13 @@ impl AppState {
                 persistence.clone(),
             )),
             unlink_client_organization: Arc::new(
-                UnlinkClientOrganizationService::with_persistence(persistence),
+                UnlinkClientOrganizationService::with_persistence(persistence.clone()),
+            ),
+            link_supplier_organization: Arc::new(
+                LinkSupplierOrganizationService::with_persistence(persistence.clone()),
+            ),
+            unlink_supplier_organization: Arc::new(
+                UnlinkSupplierOrganizationService::with_persistence(persistence),
             ),
         }
     }

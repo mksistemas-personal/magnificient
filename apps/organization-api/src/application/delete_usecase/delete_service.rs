@@ -97,10 +97,10 @@ mod tests {
             OrganizationEntityType::Client,
             "admin",
         );
-        let producer_link = OrganizationLink::new(
+        let supplier_link = OrganizationLink::new(
             org_id,
             TSID::from(3002u64),
-            OrganizationEntityType::Producer,
+            OrganizationEntityType::Supplier,
             "admin",
         );
 
@@ -108,7 +108,7 @@ mod tests {
         OrganizationRepository::link_entity(&repo, conn, &client_link)
             .await
             .unwrap();
-        OrganizationRepository::link_entity(&repo, conn, &producer_link)
+        OrganizationRepository::link_entity(&repo, conn, &supplier_link)
             .await
             .unwrap();
 
@@ -131,13 +131,13 @@ mod tests {
             linked_entities,
             vec![
                 LinkedEntity::new(TSID::from(2001u64), OrganizationEntityType::Client),
-                LinkedEntity::new(TSID::from(3002u64), OrganizationEntityType::Producer),
+                LinkedEntity::new(TSID::from(3002u64), OrganizationEntityType::Supplier),
             ]
         );
 
         let expected_err = OrganizationBusinessErrors::has_linked_entities(&[
             LinkedEntity::new(TSID::from(2001u64), OrganizationEntityType::Client),
-            LinkedEntity::new(TSID::from(3002u64), OrganizationEntityType::Producer),
+            LinkedEntity::new(TSID::from(3002u64), OrganizationEntityType::Supplier),
         ]);
         assert_eq!(error, expected_err);
 

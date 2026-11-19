@@ -5,9 +5,11 @@ mod all_usecase;
 mod by_id_usecase;
 mod delete_usecase;
 mod link_client_organization_usecase;
+mod link_supplier_organization_usecase;
 mod persistence;
 pub mod service_constructors;
 mod unlink_client_organization_usecase;
+mod unlink_supplier_organization_usecase;
 mod update_usecase;
 
 pub use crate::errors::{OrganizationBusinessErrors, OrganizationErrors};
@@ -24,9 +26,15 @@ pub use delete_usecase::{DeleteOrganizationRequest, DeleteOrganizationService};
 pub use link_client_organization_usecase::{
     LinkClientOrganizationRequest, LinkClientOrganizationService,
 };
+pub use link_supplier_organization_usecase::{
+    LinkSupplierOrganizationRequest, LinkSupplierOrganizationService,
+};
 pub use persistence::OrganizationPersistence;
 pub use service_constructors::FromPersistence;
 pub use unlink_client_organization_usecase::{
     UnlinkClientOrganizationRequest, UnlinkClientOrganizationService,
+};
+pub use unlink_supplier_organization_usecase::{
+    UnlinkSupplierOrganizationRequest, UnlinkSupplierOrganizationService,
 };
 pub use update_usecase::{UpdateOrganizationRequest, UpdateOrganizationService};

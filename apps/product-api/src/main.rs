@@ -1,0 +1,92 @@
+use database::{
+    DatabaseConnection, combine_migrators, migrator_with_table, provision_tenant_schema,
+};
+use messaging::{MessageConsumerRegistry, RabbitMqPublisher, create_rabbitmq_client};
+use organization_contracts::v1::{EVENT_NAME, EVENT_VERSION, OrganizationEvent};
+use rabbit_warren::RmqClient;
+use std::error::Error;
+use std::sync::Arc;
+use product_api::adapters::api::{AppState, create_router};
+use product_api::adapters::consumer::OrganizationEventHandler;
+use product_api::config::ProductAppConfig;
+use product_api::constants::PRODUCT_INPUT_QUEUE;
+use product_api::infrastructure::RabbitmqSeed;
+use tokio::net::TcpListener;
+use tracing::info;
+
+fn init_tracing(config: &ProductAppConfig) {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| config.logging.level.clone().into()),
+        )
+        .init();
+}
+
+async fn setup_database(
+    config: &ProductAppConfig,
+) -> Result<DatabaseConnection, Box<dyn std::error::Error>> {
+    let db = DatabaseConnection::connect_with_config(&config.database).await?;
+    let migrator = migrator_with_table(
+        combine_migrators([shared::database::migrator(), sqlx::migrate!("./migrations")]),
+        "product_api_migrations",
+    );
+    let tenant_slugs: Vec<String> =
+        sqlx::query_scalar("SELECT slug FROM public.tenants WHERE active = TRUE ORDER BY slug")
+            .fetch_all(db.pool())
+            .await?;
+
+    for tenant in tenant_slugs {
+        info!("Applying product schema migrations for tenant '{tenant}'...");
+        provision_tenant_schema(db.pool(), &tenant, &migrator)
+            .await
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+    }
+    Ok(db)
+}
+
+async fn setup_messaging(
+    config: &ProductAppConfig,
+    db: DatabaseConnection,
+) -> Result<(AppState, MessageConsumerRegistry), Box<dyn std::error::Error>> {
+    info!("Initializing RabbitMQ publisher...");
+    let publisher_client = create_rabbitmq_client(&config.rabbitmq).await?;
+    RabbitmqSeed::new(&publisher_client).create().await?;
+    let publisher = Arc::new(RabbitMqPublisher::new(publisher_client));
+    let state = AppState::new_with_publisher(Arc::new(config.clone()), db, publisher);
+    let consumer_client = create_rabbitmq_client(&config.rabbitmq).await?;
+
+    let registry = register_events(&state, consumer_client)?;
+
+    Ok((state, registry))
+}
+
+fn register_events(
+    state: &AppState,
+    consumer_client: RmqClient,
+) -> Result<MessageConsumerRegistry, Box<dyn Error>> {
+    let mut registry = MessageConsumerRegistry::new(consumer_client);
+    registry.register::<OrganizationEvent, _>(
+        EVENT_NAME,
+        EVENT_VERSION,
+        OrganizationEventHandler::new(state.clone()),
+    )?;
+    registry.start(PRODUCT_INPUT_QUEUE);
+    Ok(registry)
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Arc::new(ProductAppConfig::load()?);
+    init_tracing(&config);
+    let db = setup_database(&config).await?;
+    let address = format!("{}:{}", config.server.host, config.server.port);
+    let listener = TcpListener::bind(&address).await?;
+    let (state, consumer_registry) = setup_messaging(&config, db).await?;
+
+    info!("Product API listening on http://{address}");
+    let server_result = axum::serve(listener, create_router(state)).await;
+    consumer_registry.shutdown().await;
+    server_result?;
+    Ok(())
+}

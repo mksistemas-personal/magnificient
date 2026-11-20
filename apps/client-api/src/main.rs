@@ -1,6 +1,7 @@
 use cliente_api::adapters::api::{AppState, create_router};
-use cliente_api::config::ClientAppConfig;
 use cliente_api::adapters::consumer::OrganizationEventHandler;
+use cliente_api::config::ClientAppConfig;
+use cliente_api::constants::CLIENT_INPUT_QUEUE;
 use cliente_api::infrastructure::RabbitmqSeed;
 use database::{
     DatabaseConnection, combine_migrators, migrator_with_table, provision_tenant_schema,
@@ -70,7 +71,7 @@ fn register_events(
         EVENT_VERSION,
         OrganizationEventHandler::new(state.clone()),
     )?;
-    registry.start("client-input.main");
+    registry.start(CLIENT_INPUT_QUEUE);
     Ok(registry)
 }
 

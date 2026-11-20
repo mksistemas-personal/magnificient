@@ -1915,6 +1915,7 @@ dependencies = [
  "serde_json",
  "shared",
  "sqlx",
+ "supplier-contracts",
  "tokio",
  "tower",
  "tower-http",
@@ -2157,15 +2158,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "produtor-api"
-version = "0.1.0"
-dependencies = [
- "database",
- "messaging",
- "shared",
 ]
 
 [[package]]
@@ -2949,6 +2941,39 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
+
+[[package]]
+name = "supplier-api"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "config",
+ "database",
+ "lapin",
+ "messaging",
+ "organization-contracts",
+ "rabbit_warren",
+ "serde",
+ "serde_json",
+ "shared",
+ "sqlx",
+ "supplier-contracts",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "tsid",
+]
+
+[[package]]
+name = "supplier-contracts"
+version = "0.1.0"
+dependencies = [
+ "common-contracts",
+ "serde",
+]
 
 [[package]]
 name = "syn"

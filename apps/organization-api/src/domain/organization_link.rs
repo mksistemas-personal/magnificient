@@ -8,14 +8,14 @@ use tsid::{TSID, create_tsid};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OrganizationEntityType {
     Client,
-    Producer,
+    Supplier,
 }
 
 impl OrganizationEntityType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Client => "CLIENT",
-            Self::Producer => "PRODUCER",
+            Self::Supplier => "SUPPLIER",
         }
     }
 }
@@ -32,7 +32,7 @@ impl FromStr for OrganizationEntityType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_uppercase().as_str() {
             "CLIENT" => Ok(Self::Client),
-            "PRODUCER" => Ok(Self::Producer),
+            "SUPPLIER" => Ok(Self::Supplier),
             other => Err(format!("Unknown entity type: '{other}'")),
         }
     }

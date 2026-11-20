@@ -5,9 +5,11 @@
     <file url="file://$PROJECT_DIR$/apps/client-api/src/infrastructure/tenant.rs" value="67500df0-6f75-4870-85ff-7f8f7b5fdc53" />
     <file url="file://$PROJECT_DIR$/apps/client-api/src/main.rs" value="67500df0-6f75-4870-85ff-7f8f7b5fdc53" />
     <file url="file://$PROJECT_DIR$/apps/organization-api/migrations/20261113000000_create_organization_links.sql" value="67500df0-6f75-4870-85ff-7f8f7b5fdc53" />
+    <file url="file://$PROJECT_DIR$/apps/organization-api/migrations/20261119000000_update_entity_type_enum.sql" value="67500df0-6f75-4870-85ff-7f8f7b5fdc53" />
     <file url="file://$PROJECT_DIR$/apps/organization-api/src/adapters/api/handlers/organizations_controller.rs" value="67500df0-6f75-4870-85ff-7f8f7b5fdc53" />
     <file url="file://$PROJECT_DIR$/apps/organization-api/src/infrastructure/tenant.rs" value="67500df0-6f75-4870-85ff-7f8f7b5fdc53" />
     <file url="file://$PROJECT_DIR$/apps/organization-api/src/main.rs" value="67500df0-6f75-4870-85ff-7f8f7b5fdc53" />
+    <file url="file://$PROJECT_DIR$/apps/supplier-api/src/main.rs" value="67500df0-6f75-4870-85ff-7f8f7b5fdc53" />
     <file url="file://$PROJECT_DIR$/crates/database/src/tenant_provisioning.rs" value="67500df0-6f75-4870-85ff-7f8f7b5fdc53" />
   </component>
 </project>

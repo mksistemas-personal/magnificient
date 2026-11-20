@@ -1,6 +1,6 @@
 use crate::constants::{
     CLIENT_EVENT, CLIENT_OUTPUT_EXCHANGE, ORGANIZATION_INPUT_EXCHANGE, ORGANIZATION_INPUT_QUEUE,
-    ORGANIZATION_OUTPUT_EXCHANGE, ROUTING_KEY,
+    ORGANIZATION_OUTPUT_EXCHANGE, ROUTING_KEY, SUPPLIER_EVENT, SUPPLIER_OUTPUT_EXCHANGE,
 };
 use lapin::Channel;
 use lapin::options::{ExchangeBindOptions, QueueBindOptions};
@@ -42,7 +42,8 @@ impl<'a> RabbitmqSeed<'a> {
             .await?;
 
         let channel = self.client.get_channel().await?;
-        Self::bind_client_with_organization(channel).await?;
+        Self::bind_client_with_organization(channel.clone()).await?;
+        Self::bind_supplier_with_organization(channel).await?;
 
         Ok(())
     }
@@ -59,12 +60,52 @@ impl<'a> RabbitmqSeed<'a> {
         );
         arguments
     }
-    async fn bind_client_with_organization(channel: Arc<Channel>) -> Result<(), Box<dyn Error>> {
+    async fn bind_client_with_organization(
+        channel: Arc<Channel>,
+    ) -> Result<(), Box<dyn Error>> {
         let binding_arguments = Self::client_event_binding_arguments();
         channel
             .exchange_bind(
                 ORGANIZATION_INPUT_EXCHANGE.into(),
                 CLIENT_OUTPUT_EXCHANGE.into(),
+                ROUTING_KEY.into(),
+                ExchangeBindOptions::default(),
+                binding_arguments.clone(),
+            )
+            .await?;
+        channel
+            .queue_bind(
+                ORGANIZATION_INPUT_QUEUE.into(),
+                ORGANIZATION_INPUT_EXCHANGE.into(),
+                ROUTING_KEY.into(),
+                QueueBindOptions::default(),
+                binding_arguments,
+            )
+            .await?;
+        Ok(())
+    }
+
+    fn supplier_event_binding_arguments() -> FieldTable {
+        let mut arguments = FieldTable::default();
+        arguments.insert(
+            ShortString::from("x-match"),
+            AMQPValue::LongString(LongString::from("all")),
+        );
+        arguments.insert(
+            ShortString::from("event_type"),
+            AMQPValue::LongString(LongString::from(SUPPLIER_EVENT)),
+        );
+        arguments
+    }
+
+    async fn bind_supplier_with_organization(
+        channel: Arc<Channel>,
+    ) -> Result<(), Box<dyn Error>> {
+        let binding_arguments = Self::supplier_event_binding_arguments();
+        channel
+            .exchange_bind(
+                ORGANIZATION_INPUT_EXCHANGE.into(),
+                SUPPLIER_OUTPUT_EXCHANGE.into(),
                 ROUTING_KEY.into(),
                 ExchangeBindOptions::default(),
                 binding_arguments.clone(),

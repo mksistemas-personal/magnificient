@@ -1,15 +1,17 @@
-use client_contracts::v1::{ClientEvent, EVENT_NAME, EVENT_VERSION};
+use client_contracts::v1::{ClientEvent, EVENT_NAME as CLIENT_EVENT_NAME, EVENT_VERSION as CLIENT_EVENT_VERSION};
 use database::{
     DatabaseConnection, combine_migrators, migrator_with_table, provision_tenant_schema,
 };
 use messaging::{MessageConsumerRegistry, RabbitMqPublisher, create_rabbitmq_client};
+use organizacao_api::ORGANIZATION_INPUT_QUEUE;
 use organizacao_api::adapters::api::{AppState, create_router};
+use organizacao_api::adapters::consumer::{ClientEventHandler, SupplierEventHandler};
 use organizacao_api::config::organization_config::OrganizationAppConfig;
-use organizacao_api::adapters::consumer::ClientEventHandler;
 use organizacao_api::infrastructure::RabbitmqSeed;
 use rabbit_warren::RmqClient;
 use std::error::Error;
 use std::sync::Arc;
+use supplier_contracts::v1::{EVENT_NAME as SUPPLIER_EVENT_NAME, EVENT_VERSION as SUPPLIER_EVENT_VERSION, SupplierEvent};
 use tokio::net::TcpListener;
 use tracing::info;
 
@@ -79,11 +81,16 @@ fn register_events(
 ) -> Result<MessageConsumerRegistry, Box<dyn Error>> {
     let mut registry = MessageConsumerRegistry::new(consumer_client);
     registry.register::<ClientEvent, _>(
-        EVENT_NAME,
-        EVENT_VERSION,
+        CLIENT_EVENT_NAME,
+        CLIENT_EVENT_VERSION,
         ClientEventHandler::new(state.clone()),
     )?;
-    registry.start("organization-input.main");
+    registry.register::<SupplierEvent, _>(
+        SUPPLIER_EVENT_NAME,
+        SUPPLIER_EVENT_VERSION,
+        SupplierEventHandler::new(state.clone()),
+    )?;
+    registry.start(ORGANIZATION_INPUT_QUEUE);
     Ok(registry)
 }
 

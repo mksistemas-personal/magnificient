@@ -1,9 +1,11 @@
 pub const CLIENT_EVENT: &str = "ClientEvent";
 pub const SUPPLIER_EVENT: &str = "SupplierEvent";
+pub const PRODUCT_EVENT: &str = "ProductEvent";
 pub const ORGANIZATION_INPUT_EXCHANGE: &str = "organization.input";
 pub const ORGANIZATION_OUTPUT_EXCHANGE: &str = "organization.output";
 pub const CLIENT_OUTPUT_EXCHANGE: &str = "client.output";
 pub const SUPPLIER_OUTPUT_EXCHANGE: &str = "supplier.output";
+pub const PRODUCT_OUTPUT_EXCHANGE: &str = "product.output";
 pub const ORGANIZATION_INPUT_QUEUE: &str = "organization-input.main";
 pub const ROUTING_KEY: &str = "*";
 pub const EVENT_SOURCE: &str = "organization-api";

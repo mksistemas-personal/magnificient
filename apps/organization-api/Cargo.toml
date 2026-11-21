@@ -10,6 +10,7 @@ messaging = { path = "../../crates/messaging" }
 organization-contracts = { path = "../../crates/organization-contracts" }
 client-contracts = { path = "../../crates/client-contracts" }
 supplier-contracts = { path = "../../crates/supplier-contracts" }
+product-contracts = { path = "../../crates/product-contracts" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"
 async-trait = "0.1"

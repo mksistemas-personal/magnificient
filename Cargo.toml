@@ -4,12 +4,14 @@ members = [
     "apps/organization-api",
     "apps/client-api",
     "apps/supplier-api",
+    "apps/product-api",
     "crates/shared",
     "crates/database",
     "crates/messaging",
     "crates/organization-contracts",
     "crates/client-contracts",
     "crates/supplier-contracts",
+    "crates/product-contracts",
     "crates/common-contracts",
 ]
 

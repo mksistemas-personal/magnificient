@@ -5,13 +5,14 @@ use database::{
 use messaging::{MessageConsumerRegistry, RabbitMqPublisher, create_rabbitmq_client};
 use organizacao_api::ORGANIZATION_INPUT_QUEUE;
 use organizacao_api::adapters::api::{AppState, create_router};
-use organizacao_api::adapters::consumer::{ClientEventHandler, SupplierEventHandler};
+use organizacao_api::adapters::consumer::{ClientEventHandler, ProductEventHandler, SupplierEventHandler};
 use organizacao_api::config::organization_config::OrganizationAppConfig;
 use organizacao_api::infrastructure::RabbitmqSeed;
 use rabbit_warren::RmqClient;
 use std::error::Error;
 use std::sync::Arc;
 use supplier_contracts::v1::{EVENT_NAME as SUPPLIER_EVENT_NAME, EVENT_VERSION as SUPPLIER_EVENT_VERSION, SupplierEvent};
+use product_contracts::v1::{EVENT_NAME as PRODUCT_EVENT_NAME, EVENT_VERSION as PRODUCT_EVENT_VERSION, ProductEvent};
 use tokio::net::TcpListener;
 use tracing::info;
 
@@ -89,6 +90,11 @@ fn register_events(
         SUPPLIER_EVENT_NAME,
         SUPPLIER_EVENT_VERSION,
         SupplierEventHandler::new(state.clone()),
+    )?;
+    registry.register::<ProductEvent, _>(
+        PRODUCT_EVENT_NAME,
+        PRODUCT_EVENT_VERSION,
+        ProductEventHandler::new(state.clone()),
     )?;
     registry.start(ORGANIZATION_INPUT_QUEUE);
     Ok(registry)

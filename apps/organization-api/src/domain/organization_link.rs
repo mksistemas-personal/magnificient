@@ -9,6 +9,7 @@ use tsid::{TSID, create_tsid};
 pub enum OrganizationEntityType {
     Client,
     Supplier,
+    Product,
 }
 
 impl OrganizationEntityType {
@@ -16,6 +17,7 @@ impl OrganizationEntityType {
         match self {
             Self::Client => "CLIENT",
             Self::Supplier => "SUPPLIER",
+            Self::Product => "PRODUCT",
         }
     }
 }
@@ -33,6 +35,7 @@ impl FromStr for OrganizationEntityType {
         match s.trim().to_uppercase().as_str() {
             "CLIENT" => Ok(Self::Client),
             "SUPPLIER" => Ok(Self::Supplier),
+            "PRODUCT" => Ok(Self::Product),
             other => Err(format!("Unknown entity type: '{other}'")),
         }
     }

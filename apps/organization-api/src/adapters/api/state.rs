@@ -2,8 +2,8 @@ use crate::application::{
     AddOrganizationRequest, AddOrganizationService, DeleteOrganizationRequest,
     DeleteOrganizationService, FindAllOrganizationsRequest, FindAllOrganizationsService,
     FindOrganizationByIdRequest, FromPersistence, GetOrganizationByIdService,
-    LinkClientOrganizationService, LinkSupplierOrganizationService, OrganizationPersistence,
-    UnlinkClientOrganizationService, UnlinkSupplierOrganizationService,
+    LinkClientOrganizationService, LinkProductOrganizationService, LinkSupplierOrganizationService, OrganizationPersistence,
+    UnlinkClientOrganizationService, UnlinkProductOrganizationService, UnlinkSupplierOrganizationService,
     UpdateOrganizationRequest, UpdateOrganizationService,
 };
 use crate::config::organization_config::OrganizationAppConfig;
@@ -39,6 +39,8 @@ pub struct AppState {
         Arc<dyn AsyncGetAllUseCase<FindAllOrganizationsRequest, Page<Organization>>>,
     pub link_client_organization: Arc<LinkClientOrganizationService>,
     pub unlink_client_organization: Arc<UnlinkClientOrganizationService>,
+    pub link_product_organization: Arc<LinkProductOrganizationService>,
+    pub unlink_product_organization: Arc<UnlinkProductOrganizationService>,
     pub link_supplier_organization: Arc<LinkSupplierOrganizationService>,
     pub unlink_supplier_organization: Arc<UnlinkSupplierOrganizationService>,
 }
@@ -155,6 +157,12 @@ impl AppState {
             )),
             unlink_client_organization: Arc::new(
                 UnlinkClientOrganizationService::with_persistence(persistence.clone()),
+            ),
+            link_product_organization: Arc::new(
+                LinkProductOrganizationService::with_persistence(persistence.clone()),
+            ),
+            unlink_product_organization: Arc::new(
+                UnlinkProductOrganizationService::with_persistence(persistence.clone()),
             ),
             link_supplier_organization: Arc::new(
                 LinkSupplierOrganizationService::with_persistence(persistence.clone()),

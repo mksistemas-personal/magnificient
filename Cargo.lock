@@ -1910,6 +1910,7 @@ dependencies = [
  "lapin",
  "messaging",
  "organization-contracts",
+ "product-contracts",
  "rabbit_warren",
  "serde",
  "serde_json",
@@ -2172,6 +2173,7 @@ dependencies = [
  "lapin",
  "messaging",
  "organization-contracts",
+ "product-contracts",
  "rabbit_warren",
  "serde",
  "serde_json",
@@ -2182,6 +2184,13 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tsid",
+]
+
+[[package]]
+name = "product-contracts"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

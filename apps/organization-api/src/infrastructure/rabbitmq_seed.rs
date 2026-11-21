@@ -1,6 +1,7 @@
 use crate::constants::{
     CLIENT_EVENT, CLIENT_OUTPUT_EXCHANGE, ORGANIZATION_INPUT_EXCHANGE, ORGANIZATION_INPUT_QUEUE,
-    ORGANIZATION_OUTPUT_EXCHANGE, ROUTING_KEY, SUPPLIER_EVENT, SUPPLIER_OUTPUT_EXCHANGE,
+    ORGANIZATION_OUTPUT_EXCHANGE, PRODUCT_EVENT, PRODUCT_OUTPUT_EXCHANGE, ROUTING_KEY,
+    SUPPLIER_EVENT, SUPPLIER_OUTPUT_EXCHANGE,
 };
 use lapin::Channel;
 use lapin::options::{ExchangeBindOptions, QueueBindOptions};
@@ -43,7 +44,8 @@ impl<'a> RabbitmqSeed<'a> {
 
         let channel = self.client.get_channel().await?;
         Self::bind_client_with_organization(channel.clone()).await?;
-        Self::bind_supplier_with_organization(channel).await?;
+        Self::bind_supplier_with_organization(channel.clone()).await?;
+        Self::bind_product_with_organization(channel).await?;
 
         Ok(())
     }
@@ -106,6 +108,44 @@ impl<'a> RabbitmqSeed<'a> {
             .exchange_bind(
                 ORGANIZATION_INPUT_EXCHANGE.into(),
                 SUPPLIER_OUTPUT_EXCHANGE.into(),
+                ROUTING_KEY.into(),
+                ExchangeBindOptions::default(),
+                binding_arguments.clone(),
+            )
+            .await?;
+        channel
+            .queue_bind(
+                ORGANIZATION_INPUT_QUEUE.into(),
+                ORGANIZATION_INPUT_EXCHANGE.into(),
+                ROUTING_KEY.into(),
+                QueueBindOptions::default(),
+                binding_arguments,
+            )
+            .await?;
+        Ok(())
+    }
+
+    fn product_event_binding_arguments() -> FieldTable {
+        let mut arguments = FieldTable::default();
+        arguments.insert(
+            ShortString::from("x-match"),
+            AMQPValue::LongString(LongString::from("all")),
+        );
+        arguments.insert(
+            ShortString::from("event_type"),
+            AMQPValue::LongString(LongString::from(PRODUCT_EVENT)),
+        );
+        arguments
+    }
+
+    async fn bind_product_with_organization(
+        channel: Arc<Channel>,
+    ) -> Result<(), Box<dyn Error>> {
+        let binding_arguments = Self::product_event_binding_arguments();
+        channel
+            .exchange_bind(
+                ORGANIZATION_INPUT_EXCHANGE.into(),
+                PRODUCT_OUTPUT_EXCHANGE.into(),
                 ROUTING_KEY.into(),
                 ExchangeBindOptions::default(),
                 binding_arguments.clone(),

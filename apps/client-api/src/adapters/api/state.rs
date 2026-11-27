@@ -4,13 +4,13 @@ use crate::application::{
     GetClientByIdRequest, GetClientByIdService, UpdateClientRequest, UpdateClientService,
 };
 use crate::config::ClientAppConfig;
-use crate::domain::Client;
+use crate::domain::{Client, ClientRepository};
 use crate::infrastructure::PostgresClientRepository;
 use database::DatabaseConnection;
 use messaging::RabbitMqPublisher;
 use shared::entities::{
-    AsyncAddEntityUseCase, AsyncDeleteEntityUseCase, AsyncGetAllUseCase, AsyncGetByIdUseCase,
-    AsyncUpdateEntityUseCase, BusinessError, PostgresAddressRepository,
+    AddressRepository, AsyncAddEntityUseCase, AsyncDeleteEntityUseCase, AsyncGetAllUseCase,
+    AsyncGetByIdUseCase, AsyncUpdateEntityUseCase, BusinessError, PostgresAddressRepository,
 };
 use shared::types::Page;
 use std::sync::Arc;
@@ -49,6 +49,16 @@ impl AppState {
         let mut state = Self::new(config, db);
         state.message_publisher = Some(message_publisher);
         state
+    }
+
+    pub fn new_with_repositories(
+        config: Arc<ClientAppConfig>,
+        db: DatabaseConnection,
+        repository: impl ClientRepository + 'static,
+        address_repository: impl AddressRepository + 'static,
+    ) -> Self {
+        let persistence = ClientPersistence::new_without_pool(repository, address_repository);
+        Self::from_persistence(config, db, String::new(), None, persistence)
     }
 
     pub fn for_tenant_schema(&self, schema: &str, tenant: &str) -> Result<Self, BusinessError> {

@@ -17,6 +17,7 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/supplier-contracts/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/apps/product-api/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/product-contracts/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/client-api/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

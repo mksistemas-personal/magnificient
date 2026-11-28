@@ -25,7 +25,12 @@ pub struct LoggingConfig {
 impl ClientAppConfig {
     pub fn load() -> Result<Self, ConfigError> {
         Config::builder()
-            .add_source(config::File::with_name("apps/client-api/cfg/default").required(false))
+            .add_source(
+                config::File::from(
+                    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("cfg/default.toml"),
+                )
+                .required(false),
+            )
             .add_source(config::Environment::with_prefix("APP").separator("__"))
             .build()?
             .try_deserialize()
